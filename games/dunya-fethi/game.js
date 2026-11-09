@@ -5,6 +5,8 @@
   const CD = window.COUNTRY_DATA;
   const $ = (id) => document.getElementById(id);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let SKIP = false;
+  const nap = (ms) => (SKIP ? Promise.resolve() : sleep(ms)); // animasyon beklemeleri, "Sonuca atla" ile kesilir
   const rnd = (n) => Math.floor(Math.random() * n);
   const fmt1 = (x) => (Math.round(x * 10) / 10).toFixed(1).replace(".", ",");
 
@@ -23,7 +25,8 @@
 
   // Büyük ülkeler bölgelere ayrılır. Başkent bölgesi en son düşer.
   const KM2_PER_SR = 510072000 / (4 * Math.PI);
-  const SPLIT3_KM2 = 5000000, SPLIT2_KM2 = 1900000;
+  // Bölgelere ayırma kapalı (her ülkenin tek hakkı var). Açmak için: SPLIT3_KM2 = 5000000, SPLIT2_KM2 = 1900000
+  const SPLIT3_KM2 = Infinity, SPLIT2_KM2 = Infinity;
   const CAPITALS = {
     RU: [37.62, 55.75], CA: [-75.7, 45.42], US: [-77.04, 38.9], CN: [116.4, 39.9], BR: [-47.88, -15.79],
     AU: [149.13, -35.28], IN: [77.21, 28.61], AR: [-58.38, -34.6], KZ: [71.45, 51.17], DZ: [3.06, 36.75],
@@ -561,18 +564,18 @@
       }
     }, 80);
     try {
-      await sleep(sp.roll);
+      await nap(sp.roll);
       if (sp.seq) {
         let sumA = 0, sumB = 0;
         for (let i = 0; i < 3; i++) {
           stopped.A[i] = true; setDie(elA, i, dA[i], "stop"); sumA += dA[i];
           setScore(elA, String(sumA));
           $("result").textContent = `${i + 1}. zar: ${S.terr[A.id].name} ${dA[i]} attı…`;
-          await sleep(sp.step);
+          await nap(sp.step);
           stopped.B[i] = true; setDie(elB, i, dB[i], "stop"); sumB += dB[i];
           setScore(elB, String(sumB));
           $("result").textContent = `${i + 1}. zar: ${S.terr[B.id].name} ${dB[i]} attı…`;
-          await sleep(sp.step);
+          await nap(sp.step);
         }
       } else {
         for (let i = 0; i < 3; i++) { stopped.A[i] = stopped.B[i] = true; setDie(elA, i, dA[i], "stop"); setDie(elB, i, dB[i], "stop"); }
@@ -622,12 +625,12 @@
       if (animated) { showFinal($("sideA"), dA, mA, sA); showFinal($("sideB"), dB, mB, sB); }
       if (sA !== sB) break;
       ties++;
-      if (anim) { $("result").innerHTML = `<span class="rw" style="color:var(--orange2)">Berabere!</span>`; await sleep(1200); }
+      if (anim) { $("result").innerHTML = `<span class="rw" style="color:var(--orange2)">Berabere!</span>`; await nap(1200); }
     }
 
     const Wn = sA > sB ? A : B, L = Wn === A ? B : A;
     const wM = Wn === A ? mA : mB, lM = Wn === A ? mB : mA;
-    if (anim && sp.reveal) { $("result").textContent = "Puanlar hesaplanıyor…"; await sleep(sp.reveal); }
+    if (anim && sp.reveal) { $("result").textContent = "Puanlar hesaplanıyor…"; await nap(sp.reveal); }
     if (animated) {
       $(Wn === A ? "sideA" : "sideB").classList.add("win");
       $(Wn === A ? "sideB" : "sideA").classList.add("lose");
@@ -788,7 +791,9 @@
 
   async function skipToEnd() {
     S.running = false;
+    SKIP = true;
     while (S.busy) await sleep(30);
+    SKIP = false;
     S.busy = true;
     $("result").textContent = "Sonuç hesaplanıyor…";
     await sleep(20);
