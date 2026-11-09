@@ -56,7 +56,7 @@ aside{border-left:1px solid var(--line);background:var(--panel);display:flex;fle
 .card h3{margin:0 0 10px;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:700}
 .battle{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start}
 .side{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:10px 8px;text-align:center;transition:all .3s;min-height:150px}
-.side.win{border-color:var(--win);box-shadow:0 0 18px rgba(70,211,154,.35)}
+.side.win{border-color:var(--win);box-shadow:0 0 22px rgba(70,211,154,.5);transform:scale(1.04)}
 .side.lose{border-color:var(--lose);opacity:.7}
 .side .flag{width:64px;height:43px;border-radius:5px;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.5);background:#223}
 .side .nm{font-weight:700;font-size:14px;margin:6px 0 2px;min-height:34px;display:flex;align-items:center;justify-content:center;line-height:1.15}
@@ -70,7 +70,10 @@ aside{border-left:1px solid var(--line);background:var(--panel);display:flex;fle
 @keyframes shake{0%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}100%{transform:rotate(-8deg)}}
 .score{font-family:Bungee,Rubik;font-size:20px;color:var(--cyan2)}
 .vs{font-family:Bungee,Rubik;color:var(--orange);font-size:18px;align-self:center}
-.result{margin-top:10px;text-align:center;font-weight:700;min-height:20px;font-size:14px}
+.result{margin-top:10px;text-align:center;font-weight:700;min-height:44px;font-size:15px;line-height:1.4}
+.result .rw{color:var(--win);font-size:18px;animation:pop .45s ease}
+.result .rl{color:var(--muted);font-weight:500;font-size:13px}
+@keyframes pop{0%{transform:scale(.6);opacity:0;display:inline-block}100%{transform:scale(1);opacity:1}}
 .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .btn{border:none;border-radius:12px;padding:12px;font-weight:800;font-size:15px;cursor:pointer;color:#071430;background:var(--cyan);transition:transform .08s, filter .2s}
 .btn:active{transform:scale(.97)}

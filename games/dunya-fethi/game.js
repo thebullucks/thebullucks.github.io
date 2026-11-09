@@ -8,11 +8,13 @@
   const rnd = (n) => Math.floor(Math.random() * n);
 
   const PLAYER_COLORS = ["#ffd84a", "#ff4dd2", "#46d39a", "#ff7b39", "#7fd3ff", "#b388ff"];
+  // roll: zar dönme süresi, reveal: zarlar durduktan sonra kazanan açıklanmadan önceki bekleme,
+  // gap: sonuç ekranda kaldıktan sonra yeni savaşa kadar geçen süre (ms)
   const SPEEDS = {
-    slow: { roll: 1500, gap: 900 },
-    normal: { roll: 850, gap: 450 },
-    fast: { roll: 350, gap: 150 },
-    turbo: { roll: 0, gap: 40 },
+    slow: { roll: 1800, reveal: 900, gap: 3500 },
+    normal: { roll: 1300, reveal: 700, gap: 2300 },
+    fast: { roll: 700, reveal: 350, gap: 1100 },
+    turbo: { roll: 0, reveal: 0, gap: 120 },
   };
 
   const S = {
@@ -445,6 +447,10 @@
     if (animated) {
       renderSide($("sideA"), A, "Saldıran", dA, false, sA);
       renderSide($("sideB"), B, "Savunan", dB, false, sB);
+      if (anim && sp.reveal) {
+        $("result").textContent = "Zarlar durdu…";
+        await sleep(sp.reveal);
+      }
       $(Wn === A ? "sideA" : "sideB").classList.add("win");
       $(Wn === A ? "sideB" : "sideA").classList.add("lose");
     }
@@ -467,7 +473,7 @@
       ? `<b>${wn.name}</b> <span class="x">→</span> ${ln.name} imparatorluğunu yıktı (${lostCount} ülke)`
       : `<b>${wn.name}</b> <span class="x">→</span> ${ln.name} fethedildi`;
     addLog(wn.code, ln.code, msg, sA, sB);
-    if (animated) $("result").innerHTML = `<span style="color:var(--win)">${wn.name}</span> kazandı! ${ln.name} fethedildi.`;
+    if (animated) $("result").innerHTML = `<span class="rw">🏆 ${wn.name} kazandı!</span><br><span class="rl">${ln.name} fethedildi${lostCount > 1 ? ` (${lostCount} ülke el değiştirdi)` : ""}</span>`;
 
     // Oyuncu elemeleri
     const aliveCount = aliveEmpires().length;
