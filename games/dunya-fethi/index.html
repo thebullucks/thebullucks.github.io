@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dünya Fethi · TheBullucks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050b17; --panel:#0b1a33; --panel2:#0f2344; --line:#1d3a66;
+  --cyan:#3fb6f0; --cyan2:#7fd3ff; --orange:#f07a2a; --orange2:#ffa15c;
+  --text:#e8f1ff; --muted:#8aa3c7; --win:#46d39a; --lose:#ff5d6c;
+  --sea:#081a33;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Rubik,system-ui,sans-serif}
+button{font-family:inherit}
+.app{display:grid;grid-template-rows:auto 1fr;height:100vh;height:100dvh}
+header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#071430,#0b1f45)}
+header img{width:40px;height:40px;border-radius:50%;box-shadow:0 0 14px rgba(63,182,240,.5)}
+header h1{font-family:Bungee,Rubik,sans-serif;font-size:20px;margin:0;letter-spacing:.5px}
+header h1 span{color:var(--orange)}
+header .sp{flex:1}
+.hbtn{background:transparent;border:1px solid var(--line);color:var(--text);padding:7px 12px;border-radius:10px;cursor:pointer;font-size:14px;text-decoration:none;display:inline-flex;gap:6px;align-items:center}
+.hbtn:hover{border-color:var(--cyan)}
+.main{display:grid;grid-template-columns:1fr 360px;min-height:0}
+.mapwrap{position:relative;min-height:0;overflow:hidden;background:radial-gradient(ellipse at center,#0c2448 0%,var(--sea) 70%)}
+#map{width:100%;height:100%;display:block;cursor:grab}
+#map:active{cursor:grabbing}
+.terr{stroke:rgba(5,11,23,.85);stroke-width:.6;vector-effect:non-scaling-stroke;transition:filter .3s}
+.terr:hover{filter:brightness(1.25)}
+.terr.atk{stroke:#ffd84a;stroke-width:2.4}
+.terr.def{stroke:#ff4d5e;stroke-width:2.4}
+.terr.flash{animation:flash .9s ease}
+@keyframes flash{0%{filter:brightness(2.2) saturate(1.5)}100%{filter:none}}
+.tiny{stroke:#fff;stroke-width:.8;vector-effect:non-scaling-stroke}
+.pl-outline{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;stroke-dasharray:5 3}
+.bline{fill:none;stroke:#ffd84a;stroke-width:2.5;vector-effect:non-scaling-stroke;stroke-dasharray:8 6;animation:dash 0.8s linear infinite;filter:drop-shadow(0 0 4px #ffd84a)}
+@keyframes dash{to{stroke-dashoffset:-28}}
+.maphud{position:absolute;left:12px;top:12px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+.chip{background:rgba(11,26,51,.88);border:1px solid var(--line);padding:6px 10px;border-radius:999px;font-size:13px;backdrop-filter:blur(4px)}
+.chip b{color:var(--cyan2)}
+.zoombtns{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
+.zoombtns button{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:rgba(11,26,51,.9);color:var(--text);font-size:18px;cursor:pointer}
+#tip{position:absolute;pointer-events:none;background:rgba(5,11,23,.95);border:1px solid var(--cyan);border-radius:10px;padding:8px 10px;font-size:13px;display:none;min-width:160px;z-index:5}
+#tip .t{font-weight:700;display:flex;gap:6px;align-items:center}
+#tip .s{color:var(--muted);margin-top:3px}
+.loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);font-size:15px;text-align:center;padding:20px}
+.spinner{width:44px;height:44px;border:4px solid var(--line);border-top-color:var(--orange);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+aside{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0;overflow:auto}
+.card{padding:14px;border-bottom:1px solid var(--line)}
+.card h3{margin:0 0 10px;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:700}
+.battle{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start}
+.side{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:10px 8px;text-align:center;transition:all .3s;min-height:150px}
+.side.win{border-color:var(--win);box-shadow:0 0 18px rgba(70,211,154,.35)}
+.side.lose{border-color:var(--lose);opacity:.7}
+.side .flag{width:64px;height:43px;border-radius:5px;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.5);background:#223}
+.side .nm{font-weight:700;font-size:14px;margin:6px 0 2px;min-height:34px;display:flex;align-items:center;justify-content:center;line-height:1.15}
+.side .mult{font-size:12px;color:var(--orange2);font-weight:700}
+.side .sub{font-size:11px;color:var(--muted)}
+.dice{display:flex;gap:4px;justify-content:center;margin:8px 0 4px}
+.die{width:24px;height:24px;background:#f4f7ff;border-radius:6px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:3px;box-shadow:inset 0 -2px 0 #c9d3ea}
+.die i{width:5px;height:5px;border-radius:50%;background:transparent;align-self:center;justify-self:center}
+.die i.on{background:#0b1a33}
+.die.roll{animation:shake .15s infinite}
+@keyframes shake{0%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}100%{transform:rotate(-8deg)}}
+.score{font-family:Bungee,Rubik;font-size:20px;color:var(--cyan2)}
+.vs{font-family:Bungee,Rubik;color:var(--orange);font-size:18px;align-self:center}
+.result{margin-top:10px;text-align:center;font-weight:700;min-height:20px;font-size:14px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{border:none;border-radius:12px;padding:12px;font-weight:800;font-size:15px;cursor:pointer;color:#071430;background:var(--cyan);transition:transform .08s, filter .2s}
+.btn:active{transform:scale(.97)}
+.btn:hover{filter:brightness(1.1)}
+.btn.or{background:var(--orange);color:#1b0b00}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:600;font-size:13px;padding:9px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.full{grid-column:1/-1}
+.row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:1}
+.seg button{flex:1;background:transparent;border:none;color:var(--muted);padding:7px 4px;font-size:12px;cursor:pointer}
+.seg button.on{background:var(--panel2);color:var(--text);font-weight:700;box-shadow:inset 0 -2px 0 var(--cyan)}
+.lb{list-style:none;margin:0;padding:0}
+.lb li{display:grid;grid-template-columns:20px 28px 1fr auto;gap:8px;align-items:center;padding:6px 4px;border-radius:8px;font-size:13px}
+.lb li:nth-child(odd){background:rgba(255,255,255,.02)}
+.lb li img{width:26px;height:17px;border-radius:3px;object-fit:cover}
+.lb .rk{color:var(--muted);font-weight:700;text-align:right}
+.lb .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb .c{color:var(--cyan2);font-weight:700;font-size:12px;text-align:right}
+.lb .pl{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:5px}
+.log{font-size:12.5px;max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:5px}
+.log div{display:flex;gap:6px;align-items:center;line-height:1.3}
+.log img{width:20px;height:13px;border-radius:2px;object-fit:cover;flex:none}
+.log .x{color:var(--muted)}
+.players{display:flex;flex-direction:column;gap:6px}
+.pchip{display:flex;align-items:center;gap:8px;font-size:13px;background:var(--panel2);border-radius:10px;padding:6px 8px;border-left:4px solid}
+.pchip img{width:24px;height:16px;border-radius:2px;object-fit:cover}
+.pchip.out{opacity:.45;text-decoration:line-through}
+.pchip .st{margin-left:auto;font-size:11px;color:var(--muted)}
+
+.modal{position:fixed;inset:0;background:rgba(2,6,14,.78);display:none;align-items:center;justify-content:center;z-index:20;padding:16px;backdrop-filter:blur(3px)}
+.modal.show{display:flex}
+.mbox{background:var(--panel);border:1px solid var(--line);border-radius:20px;max-width:560px;width:100%;padding:22px;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.mbox h2{font-family:Bungee,Rubik;margin:0 0 6px;font-size:24px}
+.mbox h2 span{color:var(--orange)}
+.mbox p{color:var(--muted);margin:0 0 14px;line-height:1.5;font-size:14px}
+.prow{display:grid;grid-template-columns:14px 1fr 1.3fr 36px;gap:8px;align-items:center;margin-bottom:8px}
+.prow .dot{width:14px;height:14px;border-radius:50%}
+.prow input,.prow select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:9px;font-size:14px;font-family:inherit;width:100%}
+.prow button{height:36px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.rules{background:var(--panel2);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--muted);line-height:1.55;margin:12px 0}
+.rules b{color:var(--text)}
+.winbox{text-align:center}
+.winbox img{width:180px;height:120px;object-fit:cover;border-radius:10px;box-shadow:0 0 40px rgba(240,122,42,.5);margin:10px 0}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0;text-align:left}
+.stats div{background:var(--panel2);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted)}
+.stats b{display:block;color:var(--text);font-size:14px;margin-top:2px}
+.toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:var(--orange);color:#1b0b00;font-weight:800;padding:10px 18px;border-radius:12px;z-index:30;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .3s, top .3s;pointer-events:none}
+.toast.show{opacity:1;top:80px}
+
+@media (max-width:900px){
+  .main{grid-template-columns:1fr;grid-template-rows:52vh auto;overflow:auto}
+  aside{border-left:none;border-top:1px solid var(--line);overflow:visible}
+  .app{height:auto;min-height:100vh}
+  header h1{font-size:16px}
+  .hide-sm{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <a href="../../index.html"><img src="../../assets/logo.jpg" alt="TheBullucks"></a>
+    <h1>DÜNYA <span>FETHİ</span></h1>
+    <div class="sp"></div>
+    <button class="hbtn" id="btnNew">🎲 Yeni Oyun</button>
+    <button class="hbtn hide-sm" id="btnFs">⛶ Tam ekran</button>
+    <a class="hbtn hide-sm" href="../../index.html">← Oyunlar</a>
+  </header>
+  <div class="main">
+    <div class="mapwrap" id="mapwrap">
+      <svg id="map"></svg>
+      <div class="maphud">
+        <div class="chip">Kalan ülke: <b id="hudAlive">–</b></div>
+        <div class="chip">Savaş: <b id="hudBattles">0</b></div>
+      </div>
+      <div class="zoombtns">
+        <button id="zIn" title="Yakınlaş">+</button>
+        <button id="zOut" title="Uzaklaş">−</button>
+        <button id="zReset" title="Sıfırla">⟲</button>
+      </div>
+      <div id="tip"></div>
+      <div class="loading" id="loading"><div class="spinner"></div><div id="loadingTxt">Dünya haritası yükleniyor…</div></div>
+    </div>
+    <aside>
+      <div class="card">
+        <h3>Savaş</h3>
+        <div class="battle">
+          <div class="side" id="sideA"><div class="sub">Saldıran</div></div>
+          <div class="vs">VS</div>
+          <div class="side" id="sideB"><div class="sub">Savunan</div></div>
+        </div>
+        <div class="result" id="result">Başlamak için “Savaş!” tuşuna bas.</div>
+      </div>
+      <div class="card">
+        <div class="controls">
+          <button class="btn" id="btnBattle">⚔️ Savaş!</button>
+          <button class="btn or" id="btnAuto">▶ Otomatik</button>
+          <button class="btn ghost full" id="btnSkip">⏭ Sonuca atla</button>
+        </div>
+        <div class="row">Hız
+          <div class="seg" id="segSpeed">
+            <button data-v="slow">Yavaş</button><button data-v="normal" class="on">Normal</button><button data-v="fast">Hızlı</button><button data-v="turbo">Turbo</button>
+          </div>
+        </div>
+        <div class="row">Eşleşme
+          <div class="seg" id="segPair">
+            <button data-v="near" class="on">Komşular</button><button data-v="random">Tam rastgele</button>
+          </div>
+        </div>
+        <div class="row">Çarpan
+          <div class="seg" id="segMult">
+            <button data-v="country" class="on">Ülke nüfusu</button><button data-v="empire">İmparatorluk</button>
+          </div>
+        </div>
+      </div>
+      <div class="card" id="playersCard" style="display:none">
+        <h3>Oyuncular</h3>
+        <div class="players" id="players"></div>
+      </div>
+      <div class="card">
+        <h3>En büyük imparatorluklar</h3>
+        <ol class="lb" id="lb"></ol>
+      </div>
+      <div class="card">
+        <h3>Fetih günlüğü</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="modal" id="setup">
+  <div class="mbox">
+    <h2>DÜNYA <span>FETHİ</span></h2>
+    <p>Dünyadaki her ülke kendi bayrağıyla savaşa giriyor. Her turda iki ülke eşleşir, ikisi de 3 zar atar. Kazanan, kaybedenin bütün topraklarını fetheder. Sona kalan dünyanın hakimi olur!</p>
+    <div class="rules">
+      <b>Nüfus çarpanı:</b> Zar toplamı, ülkenin nüfusuna göre çarpılır.<br>
+      &lt;5M ×1.0 · 5–20M ×1.1 · 20–50M ×1.2 · 50–100M ×1.3 · 100–300M ×1.5 · 300M–1B ×1.75 · 1B+ ×2.0<br>
+      <b>Beraberlik:</b> Zarlar yeniden atılır.
+    </div>
+    <p style="margin-bottom:8px"><b style="color:var(--text)">Oyuncular (isteğe bağlı):</b> Her oyuncu bir ülke seçsin. Ülkesi en son ayakta kalan kazanır.</p>
+    <div id="prows"></div>
+    <div class="controls" style="margin-top:10px">
+      <button class="btn ghost" id="addP">+ Oyuncu ekle</button>
+      <button class="btn ghost" id="randAll">🎲 Hepsine rastgele ülke</button>
+      <button class="btn or full" id="startGame">Oyunu Başlat</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="winModal">
+  <div class="mbox winbox" id="winBox"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="countries.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
