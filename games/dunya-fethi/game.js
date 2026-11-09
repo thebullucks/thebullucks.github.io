@@ -35,7 +35,7 @@
     busy: false,
     speed: "normal",
     pair: "near",
-    mult: "country",
+    mult: "empire",
     players: [],
     upset: null,
     biggest: null,
@@ -224,6 +224,8 @@
   /* ---------------- Oyun yardımcıları ---------------- */
 
   function multFromPop(p) {
+    if (p >= 4000) return 2.5;
+    if (p >= 2000) return 2.25;
     if (p >= 1000) return 2.0;
     if (p >= 300) return 1.75;
     if (p >= 100) return 1.5;
@@ -577,6 +579,7 @@
       <img class="flag" src="${flagOf(t.code)}" alt="">
       <div class="nm">${title}</div>
       <div class="sub">${sub}</div>
+      <div class="sub pop">👥 ${fmtPop(empPop(e))}</div>
       <div class="mult">Çarpan ×${(m != null ? m : empMult(e)).toFixed(2)}</div>
       <div class="dice">${[1, 1, 1].map((v) => `<div class="die">${dieInner(v)}</div>`).join("")}</div>
       <div class="score">–</div><div class="calc"></div>`;
@@ -785,7 +788,7 @@
     $("lb").innerHTML = top.map(({ e, c }, i) => {
       const t = S.terr[e.id];
       const pl = S.players.filter((p) => p.idx === e.id).map((p) => `<span class="pl" style="background:${p.color}" title="${p.name}"></span>`).join("");
-      return `<li><span class="rk">${i + 1}</span><img src="${flagOf(t.code)}" alt=""><span class="n">${t.name}${pl}</span><span class="c">${c} ${sizeWord()}${isCity() && S.mult !== "empire" ? "" : ` · ×${empMult(e).toFixed(2)}`}</span></li>`;
+      return `<li><span class="rk">${i + 1}</span><img src="${flagOf(t.code)}" alt=""><span class="n">${t.name}${pl}</span><span class="c">${c} ${sizeWord()} · ${fmtPop(empPop(e))}${isCity() && S.mult !== "empire" ? "" : ` · ×${empMult(e).toFixed(2)}`}</span></li>`;
     }).join("");
     if (S.players.length) {
       $("playersCard").style.display = "";
