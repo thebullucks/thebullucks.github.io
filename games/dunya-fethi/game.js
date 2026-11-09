@@ -1,8 +1,11 @@
-/* Dünya Fethi — TheBullucks */
+/* Dünya Fethi — TheBullucks
+   İki mod: "classic" (her ülke tek parça) ve "city" (Şehir Savaşı: her ülke şehirlere bölünür). */
 (function () {
   "use strict";
 
   const CD = window.COUNTRY_DATA;
+  const CITIES = window.CITY_DATA || {};
+  const CAPNAMES = window.CAPITAL_NAMES || {};
   const $ = (id) => document.getElementById(id);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let SKIP = false;
@@ -12,10 +15,8 @@
 
   const PLAYER_COLORS = ["#ffd84a", "#ff4dd2", "#46d39a", "#ff7b39", "#7fd3ff", "#b388ff"];
 
-  // roll: zarların hep birlikte döndüğü süre
-  // seq: zarlar tek tek mi açılsın, step: her zarın açılma aralığı
-  // reveal: zarlar bitince kazanan açıklanmadan önceki bekleme
-  // gap: sonuç ekranda kaldıktan sonra yeni savaşa kadar geçen süre (ms)
+  // roll: zarların hep birlikte döndüğü süre; seq: zarlar tek tek mi açılsın; step: her zarın açılma aralığı
+  // reveal: zarlar bitince kazanan açıklanmadan önceki bekleme; gap: yeni savaşa kadar geçen süre (ms)
   const SPEEDS = {
     slow:   { roll: 1200, seq: true,  step: 800, reveal: 1100, gap: 4200 },
     normal: { roll: 900,  seq: true,  step: 550, reveal: 850,  gap: 3200 },
@@ -23,21 +24,11 @@
     turbo:  { roll: 0,    seq: false, step: 0,   reveal: 0,    gap: 120 },
   };
 
-  // Büyük ülkeler bölgelere ayrılır. Başkent bölgesi en son düşer.
-  const KM2_PER_SR = 510072000 / (4 * Math.PI);
-  // Bölgelere ayırma kapalı (her ülkenin tek hakkı var). Açmak için: SPLIT3_KM2 = 5000000, SPLIT2_KM2 = 1900000
-  const SPLIT3_KM2 = Infinity, SPLIT2_KM2 = Infinity;
-  const CAPITALS = {
-    RU: [37.62, 55.75], CA: [-75.7, 45.42], US: [-77.04, 38.9], CN: [116.4, 39.9], BR: [-47.88, -15.79],
-    AU: [149.13, -35.28], IN: [77.21, 28.61], AR: [-58.38, -34.6], KZ: [71.45, 51.17], DZ: [3.06, 36.75],
-    CD: [15.31, -4.32], GL: [-51.72, 64.18], SA: [46.72, 24.69], MX: [-99.13, 19.43], ID: [106.85, -6.21],
-    SD: [32.53, 15.5], LY: [13.19, 32.89], IR: [51.39, 35.69], MN: [106.92, 47.92], PE: [-77.04, -12.05],
-  };
-
   const S = {
-    terr: [],          // bölgeler: {code,key,name,rname,isCap,nReg,pop,feature,el,tinyEl,patImg,owner,lp,xy,dist}
-    capIdx: {},        // ülke kodu -> başkent bölgesinin indeksi
-    emp: new Map(),    // kurucu (başkent bölgesi) indeksi -> {id, terr:Set, alive}
+    mode: "classic",
+    terr: [],          // birimler (klasik: ülke, şehir modu: şehir)
+    capIdx: {},        // ülke kodu -> başkent biriminin indeksi (= imparatorluk kimliği)
+    emp: new Map(),
     flags: {},
     battles: 0,
     running: false,
@@ -50,6 +41,8 @@
     biggest: null,
     over: false,
   };
+  let RAW_FEATURES = null;
+  let builtMode = null;
 
   /* ---------------- Veri yükleme ---------------- */
 
@@ -176,30 +169,44 @@
     return best;
   }
 
-  // Ana kara doğunun uzağındaysa (Rusya) ya da batının uzağındaysa (ABD) tarih çizgisini aşan parçaları kaydır
-  function unwrapLon(g) {
-    const main = largestPoly(g);
-    const c = d3.geoCentroid({ type: "Polygon", coordinates: main });
-    // her noktayı ayrı ayrı kaydır: tarih çizgisini kesen tek parça halkalar da süreklileşir
-    const fix = c[0] > 60 ? (q) => (q[0] < -90 ? [q[0] + 360, q[1]] : q)
-      : c[0] < -60 ? (q) => (q[0] > 90 ? [q[0] - 360, q[1]] : q)
-      : (q) => q;
-    const polys = polysOf(g).map((p) => p.map((r) => r.map(fix)));
-    return { type: "MultiPolygon", coordinates: polys };
+  // Bir ülkeyi ekran koordinatlarında halkalara çevir (tarih çizgisi kesmesi d3 tarafından yapılır)
+  function projectRings(feature) {
+    const rings = [];
+    let cur = null;
+    const ctx = {
+      moveTo(x, y) { cur = [[x, y]]; rings.push(cur); },
+      lineTo(x, y) { cur && cur.push([x, y]); },
+      closePath() { if (cur && cur.length) cur.push(cur[0].slice()); cur = null; },
+      arc() {},
+    };
+    d3.geoPath(proj, ctx)(feature);
+    return rings.filter((r) => r.length >= 4);
   }
 
-  function clipRing(ring, axis, val, keepLess) {
-    const inside = (p) => (keepLess ? p[axis] <= val : p[axis] >= val);
-    const out = [];
-    for (let i = 0; i < ring.length - 1; i++) {
-      const a = ring[i], b = ring[i + 1];
-      const ia = inside(a), ib = inside(b);
-      if (ia) out.push(a);
-      if (ia !== ib) {
-        const t = (val - a[axis]) / (b[axis] - a[axis]);
-        const p = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
-        p[axis] = val;
-        out.push(p);
+  const ringArea = (r) => { let a = 0; for (let i = 0; i < r.length - 1; i++) a += r[i][0] * r[i + 1][1] - r[i + 1][0] * r[i][1]; return a / 2; };
+
+  // Halkayı dışbükey bir çokgenle kırp (Sutherland–Hodgman)
+  function clipConvex(ring, poly) {
+    const s = Math.sign(ringArea(poly.concat([poly[0]]))) || 1;
+    let out = ring.slice(0, -1);
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length];
+      const inside = (x) => s * ((q[0] - p[0]) * (x[1] - p[1]) - (q[1] - p[1]) * (x[0] - p[0])) >= 0;
+      const inp = out; out = [];
+      if (!inp.length) break;
+      for (let j = 0; j < inp.length; j++) {
+        const a = inp[j], b = inp[(j + 1) % inp.length];
+        const ia = inside(a), ib = inside(b);
+        if (ia) out.push(a);
+        if (ia !== ib) {
+          const dx = b[0] - a[0], dy = b[1] - a[1];
+          const ex = q[0] - p[0], ey = q[1] - p[1];
+          const den = ex * dy - ey * dx;
+          if (den !== 0) {
+            const t = (ey * (a[0] - p[0]) - ex * (a[1] - p[1])) / den;
+            out.push([a[0] + t * dx, a[1] + t * dy]);
+          }
+        }
       }
     }
     if (out.length < 3) return null;
@@ -207,81 +214,11 @@
     return out;
   }
 
-  function densify(ring) {
-    const out = [ring[0]];
-    for (let i = 1; i < ring.length; i++) {
-      const a = ring[i - 1], b = ring[i];
-      const d = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
-      if (d > 1) {
-        const n = Math.ceil(d);
-        for (let k = 1; k < n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
-      }
-      out.push(b);
-    }
-    return out;
-  }
-
-  function clipGeom(polys, axis, lo, hi) {
-    const res = [];
-    for (const p of polys) {
-      const rings = [];
-      for (let ri = 0; ri < p.length; ri++) {
-        let r = p[ri];
-        if (lo != null) r = r && clipRing(r, axis, lo, false);
-        if (hi != null) r = r && clipRing(r, axis, hi, true);
-        if (!r) { if (ri === 0) break; else continue; }
-        rings.push(r);
-      }
-      if (rings.length && rings[0]) res.push(rings);
-    }
-    return res;
-  }
-
-  function areaOf(polys) { let a = 0; for (const p of polys) a += safeArea(p); return a; }
-
-  function splitCountry(geom, n, capital) {
-    const g = unwrapLon(geom);
-    const polys = g.coordinates;
-    const main = largestPoly(g);
-    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (const q of main[0]) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
-    const axis = (x1 - x0) >= (y1 - y0) * 1.1 ? 0 : 1;
-    let lo = Infinity, hi = -Infinity;
-    for (const p of polys) for (const q of p[0]) { lo = Math.min(lo, q[axis]); hi = Math.max(hi, q[axis]); }
-    const total = areaOf(polys);
-    const cuts = [];
-    for (let k = 1; k < n; k++) {
-      const target = total * k / n;
-      let a = lo, b = hi;
-      for (let it = 0; it < 30; it++) {
-        const m = (a + b) / 2;
-        if (areaOf(clipGeom(polys, axis, null, m)) < target) a = m; else b = m;
-      }
-      cuts.push((a + b) / 2);
-    }
-    const bounds = [null, ...cuts, null];
-    const pieces = [];
-    for (let k = 0; k < n; k++) {
-      const part = clipGeom(polys, axis, bounds[k], bounds[k + 1])
-        .map((p) => p.map(densify))
-        .map((p) => (d3.geoArea({ type: "Polygon", coordinates: p }) > 2 * Math.PI ? p.map((r) => r.slice().reverse()) : p));
-      pieces.push(part);
-    }
-    // başkent hangi parçada?
-    let capK = 0;
-    if (capital) {
-      let v = capital[axis];
-      if (axis === 0 && v < lo) v += 360;
-      if (axis === 0 && v > hi) v -= 360;
-      capK = cuts.filter((c) => c < v).length;
-    }
-    const labels = axis === 0
-      ? (n === 3 ? ["Batı", "Orta", "Doğu"] : ["Batı", "Doğu"])
-      : (n === 3 ? ["Güney", "Orta", "Kuzey"] : ["Güney", "Kuzey"]);
-    return pieces.map((p, k) => ({
-      geometry: { type: "MultiPolygon", coordinates: p },
-      label: labels[k], isCap: k === capK,
-    })).filter((x) => x.geometry.coordinates.length);
+  const ringsToD = (rings) => rings.map((r) => "M" + r.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join("L") + "Z").join("");
+  function ringsBBox(rings) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const r of rings) for (const p of r) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    return [x0, y0, x1, y1];
   }
 
   /* ---------------- Oyun yardımcıları ---------------- */
@@ -295,11 +232,27 @@
     if (p >= 5) return 1.1;
     return 1.0;
   }
+  function multFromCity(p) {
+    if (p >= 20) return 2.0;
+    if (p >= 10) return 1.75;
+    if (p >= 5) return 1.5;
+    if (p >= 2) return 1.3;
+    if (p >= 1) return 1.2;
+    if (p >= 0.5) return 1.1;
+    return 1.0;
+  }
 
+  const isCity = () => S.mode === "city";
   function empPop(e) { let p = 0; for (const i of e.terr) p += S.terr[i].pop; return p; }
   function empCountries(e) { const s = new Set(); for (const i of e.terr) s.add(S.terr[i].code); return s.size; }
+  function empSize(e) { return isCity() ? e.terr.size : empCountries(e); }
+  const sizeWord = () => (isCity() ? "şehir" : "ülke");
   function empMult(e) {
     return S.mult === "empire" ? multFromPop(empPop(e)) : multFromPop(CD.pop[S.terr[e.id].code]);
+  }
+  function fightMult(e, cell) {
+    if (isCity() && S.mult !== "empire" && cell) return multFromCity(cell.cityPop);
+    return empMult(e);
   }
 
   function fmtPop(p) {
@@ -309,25 +262,13 @@
   }
 
   function aliveEmpires() { return [...S.emp.values()].filter((e) => e.alive); }
-  const fullName = (t) => (t.rname ? `${t.name} · ${t.rname}` : t.name);
+  const empName = (e) => S.terr[e.id].name;
 
   /* ---------------- Harita ---------------- */
 
-  let svg, gRoot, gTerr, gTiny, gOutline, gCap, gFx, defs, zoom, path, proj, W, H;
+  let svg, gRoot, gTerr, gTiny, gOutline, gDots, gFx, defs, zoom, path, proj, W, H;
 
-  function buildMap(features) {
-    const wrap = $("mapwrap");
-    W = wrap.clientWidth; H = wrap.clientHeight;
-    svg = d3.select("#map").attr("viewBox", `0 0 ${W} ${H}`);
-    defs = svg.append("defs");
-    gRoot = svg.append("g");
-    gTerr = gRoot.append("g");
-    gTiny = gRoot.append("g");
-    gOutline = gRoot.append("g");
-    gCap = gRoot.append("g");
-    gFx = gRoot.append("g");
-
-    // Aynı koda ait parçaları birleştir
+  function prepFeatures(features) {
     const byCode = new Map();
     for (const f of features) {
       const pn = f.properties && f.properties.name;
@@ -340,40 +281,81 @@
         prev.geometry = { type: "MultiPolygon", coordinates: polysOf(prev.geometry).concat(polysOf(f.geometry)) };
       } else byCode.set(code, { type: "Feature", id: code, properties: {}, geometry: f.geometry });
     }
+    return byCode;
+  }
 
+  function buildMap(mode) {
+    S.mode = mode;
+    builtMode = mode;
+    const wrap = $("mapwrap");
+    W = wrap.clientWidth; H = wrap.clientHeight;
+    svg = d3.select("#map");
+    svg.selectAll("*").remove();
+    svg.attr("viewBox", `0 0 ${W} ${H}`);
+    defs = svg.append("defs");
+    gRoot = svg.append("g");
+    gTerr = gRoot.append("g");
+    gTiny = gRoot.append("g");
+    gOutline = gRoot.append("g");
+    gDots = gRoot.append("g");
+    gFx = gRoot.append("g");
+
+    const byCode = prepFeatures(RAW_FEATURES);
     const fc = { type: "FeatureCollection", features: [...byCode.values()] };
     proj = d3.geoNaturalEarth1().fitExtent([[8, 8], [W - 8, H - 8]], fc);
     path = d3.geoPath(proj);
 
-    // Bölgeleri oluştur
-    S.terr = [];
+    // Birimleri oluştur
+    S.terr = []; S.capIdx = {};
     for (const [code, f] of byCode) {
       const name = CD.names[code] || code;
       const pop = CD.pop[code];
-      const km2 = d3.geoArea(f) * KM2_PER_SR;
-      const n = km2 >= SPLIT3_KM2 ? 3 : km2 >= SPLIT2_KM2 ? 2 : 1;
-      let parts = null;
-      if (n > 1) {
-        try { parts = splitCountry(f.geometry, n, CAPITALS[code]); } catch (e) { console.log("[DF] bölme hatası", code, e); }
-        if (!parts || parts.length < 2) parts = null;
-      }
-      if (!parts) parts = [{ geometry: f.geometry, label: null, isCap: true }];
-      parts.forEach((p, k) => {
+      const mainPoly = largestPoly(f.geometry);
+      const countryLP = d3.geoCentroid({ type: "Polygon", coordinates: mainPoly });
+      const list = mode === "city" ? CITIES[code] : null;
+      if (!list || list.length < 2) {
+        const capCity = list ? list[0] : null;
+        const fb = path.bounds(f);
+        const pb = path.bounds({ type: "Polygon", coordinates: mainPoly });
         S.terr.push({
-          code, key: parts.length > 1 ? `${code}-${k}` : code, name,
-          rname: parts.length > 1 ? (p.isCap ? `${p.label} (Başkent)` : p.label) : null,
-          isCap: p.isCap, nReg: parts.length, pop: pop / parts.length,
-          feature: { type: "Feature", properties: {}, geometry: p.geometry },
+          code, name, isCap: true, pop, feature: f,
+          city: capCity ? capCity[0] : (CAPNAMES[code] || name),
+          cityPop: capCity ? capCity[3] : Math.min(pop, 3),
+          d: path(f), pb: [pb[0][0], pb[0][1], pb[1][0], pb[1][1]],
+          area: (fb[1][0] - fb[0][0]) * (fb[1][1] - fb[0][1]),
+          lp: countryLP, xy: proj(countryLP), dotXY: null,
+        });
+        continue;
+      }
+      // Şehir hücreleri: ülkeyi şehirlere göre Voronoi parçalarına böl
+      const rings = projectRings(f);
+      const pts = list.map((c) => proj([c[2], c[1]]));
+      const [bx0, by0, bx1, by1] = ringsBBox(rings);
+      const pad = 50;
+      const vor = d3.Delaunay.from(pts).voronoi([Math.min(bx0, ...pts.map((p) => p[0])) - pad, Math.min(by0, ...pts.map((p) => p[1])) - pad,
+        Math.max(bx1, ...pts.map((p) => p[0])) + pad, Math.max(by1, ...pts.map((p) => p[1])) + pad]);
+      list.forEach((c, i) => {
+        const cell = vor.cellPolygon(i);
+        let cr = [];
+        if (cell) {
+          const poly = cell.slice(0, -1);
+          for (const r of rings) { const k = clipConvex(r, poly); if (k && Math.abs(ringArea(k)) > 0.01) cr.push(k); }
+        }
+        let main = null, mainA = -1;
+        for (const r of cr) { const a = Math.abs(ringArea(r)); if (a > mainA) { mainA = a; main = r; } }
+        const bb = cr.length ? ringsBBox(cr) : [pts[i][0], pts[i][1], pts[i][0], pts[i][1]];
+        const mb = main ? ringsBBox([main]) : bb;
+        S.terr.push({
+          code, name, isCap: !!c[4], pop: pop / list.length,
+          city: c[0], cityPop: c[3],
+          d: cr.length ? ringsToD(cr) : "", pb: mb,
+          area: (bb[2] - bb[0]) * (bb[3] - bb[1]),
+          lp: [c[2], c[1]], xy: pts[i], dotXY: pts[i],
         });
       });
     }
-    S.terr.sort((a, b) => a.name.localeCompare(b.name, "tr") || (b.isCap - a.isCap));
-    S.terr.forEach((t, i) => {
-      t.idx = i;
-      if (t.isCap) S.capIdx[t.code] = i;
-      t.mainPoly = largestPoly(t.feature.geometry);
-      t.lp = d3.geoCentroid({ type: "Polygon", coordinates: t.mainPoly });
-    });
+    S.terr.sort((a, b) => a.name.localeCompare(b.name, "tr") || (b.isCap - a.isCap) || b.cityPop - a.cityPop);
+    S.terr.forEach((t, i) => { t.idx = i; if (t.isCap) S.capIdx[t.code] = i; });
 
     // Mesafe matrisi
     const n = S.terr.length;
@@ -386,34 +368,29 @@
 
     // Çizim
     for (const t of S.terr) {
-      const d = path(t.feature);
-      // Bayrağı ülkenin ANA kara parçasına göre yerleştir (deniz aşırı toprakları yok say)
-      const b = path.bounds({ type: "Polygon", coordinates: t.mainPoly });
-      let x0 = b[0][0], y0 = b[0][1], x1 = b[1][0], y1 = b[1][1];
-      const fb = path.bounds(t.feature);
-      const area = (fb[1][0] - fb[0][0]) * (fb[1][1] - fb[0][1]);
-      const c = proj(t.lp) || [(x0 + x1) / 2, (y0 + y1) / 2];
-      t.xy = c;
-      t.tiny = !isFinite(area) || area < 40;
+      const c = t.xy || [0, 0];
+      t.tiny = !isFinite(t.area) || t.area < 40 || !t.d;
+      let [x0, y0, x1, y1] = t.pb;
       if (t.tiny || !isFinite(x0)) { x0 = c[0] - 4; y0 = c[1] - 4; x1 = c[0] + 4; y1 = c[1] + 4; }
       const w = Math.max(x1 - x0, 0.5), h = Math.max(y1 - y0, 0.5);
       let fw, fh;
       if (w / h > 1.5) { fw = w; fh = w / 1.5; } else { fh = h; fw = h * 1.5; }
       const px = (x0 + x1) / 2 - fw / 2, py = (y0 + y1) / 2 - fh / 2;
-      const pat = defs.append("pattern").attr("id", "p-" + t.key)
+      const pat = defs.append("pattern").attr("id", "p-" + t.idx)
         .attr("patternUnits", "userSpaceOnUse").attr("x", px).attr("y", py)
         .attr("width", fw).attr("height", fh);
       t.patImg = pat.append("image").attr("width", fw).attr("height", fh)
         .attr("preserveAspectRatio", "none").attr("href", flagOf(t.code));
-      t.el = gTerr.append("path").attr("class", "terr").attr("d", d)
-        .attr("fill", `url(#p-${t.key})`).datum(t);
+      t.el = gTerr.append("path").attr("class", "terr").attr("d", t.d || `M${c[0]},${c[1]}Z`)
+        .attr("fill", `url(#p-${t.idx})`).datum(t);
+      t.tinyEl = null;
       if (t.tiny) {
         t.tinyEl = gTiny.append("circle").attr("class", "terr tiny").attr("cx", c[0]).attr("cy", c[1])
-          .attr("r", 4).attr("fill", `url(#p-${t.key})`).datum(t);
+          .attr("r", 4).attr("fill", `url(#p-${t.idx})`).datum(t);
       }
-      if (t.nReg > 1 && t.isCap && CAPITALS[t.code]) {
-        const cp = proj(CAPITALS[t.code]);
-        if (cp) gCap.append("text").attr("class", "capstar").attr("x", cp[0]).attr("y", cp[1]).text("★");
+      if (mode === "city" && t.dotXY) {
+        if (t.isCap) gDots.append("text").attr("class", "capstar").attr("x", t.dotXY[0]).attr("y", t.dotXY[1]).text("★");
+        else gDots.append("circle").attr("class", "citydot").attr("cx", t.dotXY[0]).attr("cy", t.dotXY[1]).attr("r", 1.8);
       }
     }
 
@@ -424,10 +401,16 @@
         const e = S.emp.get(t.owner);
         const ownerT = S.terr[t.owner];
         const r = $("mapwrap").getBoundingClientRect();
-        let html = `<div class="t"><img src="${flagOf(t.code)}" style="width:22px;height:15px;border-radius:2px;object-fit:cover">${fullName(t)}</div>`;
-        html += `<div class="s">Nüfus: ${fmtPop(CD.pop[t.code])}${t.nReg > 1 ? ` · ${t.nReg} bölgeli büyük ülke` : ""}</div>`;
+        let html;
+        if (isCity()) {
+          html = `<div class="t"><img src="${flagOf(t.code)}" style="width:22px;height:15px;border-radius:2px;object-fit:cover">${t.city}${t.isCap ? " ★" : ""}</div>`;
+          html += `<div class="s">${t.name} · şehir nüfusu ${fmtPop(t.cityPop)}</div>`;
+        } else {
+          html = `<div class="t"><img src="${flagOf(t.code)}" style="width:22px;height:15px;border-radius:2px;object-fit:cover">${t.name}</div>`;
+          html += `<div class="s">Nüfus: ${fmtPop(CD.pop[t.code])}</div>`;
+        }
         if (ownerT && ownerT.code !== t.code) html += `<div class="s">Sahibi: <b style="color:var(--orange2)">${ownerT.name}</b></div>`;
-        if (e) html += `<div class="s">İmparatorluk: ${empCountries(e)} ülke · ×${empMult(e).toFixed(2)}</div>`;
+        if (e) html += `<div class="s">İmparatorluk: ${empSize(e)} ${sizeWord()} · çarpan ×${(isCity() ? fightMult(e, t) : empMult(e)).toFixed(2)}</div>`;
         tip.innerHTML = html;
         tip.style.display = "block";
         let x = ev.clientX - r.left + 14, y = ev.clientY - r.top + 14;
@@ -437,12 +420,15 @@
       })
       .on("mouseleave", () => (tip.style.display = "none"));
 
-    zoom = d3.zoom().scaleExtent([1, 14]).translateExtent([[-W * 0.2, -H * 0.2], [W * 1.2, H * 1.2]])
+    zoom = d3.zoom().scaleExtent([1, 16]).translateExtent([[-W * 0.2, -H * 0.2], [W * 1.2, H * 1.2]])
       .on("zoom", (ev) => gRoot.attr("transform", ev.transform));
     svg.call(zoom).on("dblclick.zoom", null);
     $("zIn").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 1.6);
     $("zOut").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 1 / 1.6);
     $("zReset").onclick = () => svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
+
+    const mb = document.querySelector('#segMult button[data-v="country"]');
+    if (mb) mb.textContent = mode === "city" ? "Şehir nüfusu" : "Ülke nüfusu";
   }
 
   function paintTerr(t) { t.patImg.attr("href", flagOf(S.terr[t.owner].code)); }
@@ -453,9 +439,18 @@
       if (p.out) continue;
       const e = S.emp.get(p.idx);
       if (!e || !e.alive) continue;
-      const feats = [...e.terr].map((i) => S.terr[i].feature);
-      gOutline.append("path").attr("class", "pl-outline").attr("stroke", p.color)
-        .attr("d", path({ type: "FeatureCollection", features: feats }));
+      if (isCity()) {
+        for (const i of e.terr) {
+          const t = S.terr[i];
+          const q = t.dotXY || t.xy;
+          if (q) gOutline.append("circle").attr("class", "pl-ring").attr("stroke", p.color)
+            .attr("cx", q[0]).attr("cy", q[1]).attr("r", 4.5);
+        }
+      } else {
+        const feats = [...e.terr].map((i) => S.terr[i].feature);
+        gOutline.append("path").attr("class", "pl-outline").attr("stroke", p.color)
+          .attr("d", path({ type: "FeatureCollection", features: feats }));
+      }
     }
   }
 
@@ -463,9 +458,7 @@
 
   function resetGame() {
     S.emp = new Map();
-    for (const t of S.terr) {
-      if (t.isCap) S.emp.set(t.idx, { id: t.idx, terr: new Set(), alive: true });
-    }
+    for (const t of S.terr) if (t.isCap) S.emp.set(t.idx, { id: t.idx, terr: new Set(), alive: true });
     for (const t of S.terr) {
       t.owner = S.capIdx[t.code];
       S.emp.get(t.owner).terr.add(t.idx);
@@ -482,31 +475,76 @@
     updateUI();
   }
 
+  // Başkent en son düşer: bir ülkenin kendi şehirlerinden biri elindeyken başkentine saldırılamaz.
+  // Başkent düşünce o ülkenin elindeki her şey (fethettiği şehirler dahil) fatihe geçer.
+  function ownCitiesLeft(L) {
+    const code = S.terr[L.id].code;
+    let n = 0;
+    for (const i of L.terr) if (i !== L.id && S.terr[i].code === code) n++;
+    return n;
+  }
+  // Hücre, sahibinin kendi ülkesine mi ait?
+  function isHome(j) { const t = S.terr[j]; return S.terr[t.owner].code === t.code; }
+  function isProtected(j) {
+    const L = S.emp.get(S.terr[j].owner);
+    return L.id === j && ownCitiesLeft(L) > 0;
+  }
+
+  function weightedPick(arr) {
+    const w = [0.55, 0.3, 0.15].slice(0, arr.length);
+    let r = Math.random() * w.reduce((a, b) => a + b, 0), k = 0;
+    while (r > w[k] && k < w.length - 1) { r -= w[k]; k++; }
+    return arr[k];
+  }
+
   function pickPair() {
     const alive = aliveEmpires();
     if (alive.length < 2) return null;
     const A = alive[rnd(alive.length)];
-    let B;
+
+    if (!isCity()) {
+      let B;
+      if (S.pair === "random") {
+        do { B = alive[rnd(alive.length)]; } while (B === A);
+      } else {
+        const best = new Map();
+        for (const i of A.terr) {
+          const di = S.terr[i].dist;
+          for (let j = 0; j < S.terr.length; j++) {
+            const o = S.terr[j].owner;
+            if (o === A.id) continue;
+            const d = di[j], cur = best.get(o);
+            if (cur === undefined || d < cur) best.set(o, d);
+          }
+        }
+        B = S.emp.get(weightedPick([...best.entries()].sort((a, b) => a[1] - b[1]).slice(0, 3))[0]);
+      }
+      return { A, B, aCell: null, bCell: null };
+    }
+
+    // Şehir modu: hedef her zaman bir ülkenin KENDİ şehridir (fethedilmiş şehirler sahibi çökünce toptan el değiştirir)
+    const ok = (j) => S.terr[j].owner !== A.id && isHome(j) && !isProtected(j);
+    let target;
     if (S.pair === "random") {
-      do { B = alive[rnd(alive.length)]; } while (B === A);
+      const cand = [];
+      for (let j = 0; j < S.terr.length; j++) if (ok(j)) cand.push(j);
+      target = cand[rnd(cand.length)];
     } else {
-      const best = new Map();
+      const best = new Map(); // hedef -> mesafe
       for (const i of A.terr) {
         const di = S.terr[i].dist;
         for (let j = 0; j < S.terr.length; j++) {
-          const o = S.terr[j].owner;
-          if (o === A.id) continue;
-          const d = di[j], cur = best.get(o);
-          if (cur === undefined || d < cur) best.set(o, d);
+          if (!ok(j)) continue;
+          const d = di[j], cur = best.get(j);
+          if (cur === undefined || d < cur) best.set(j, d);
         }
       }
-      const sorted = [...best.entries()].sort((a, b) => a[1] - b[1]).slice(0, 3);
-      const w = [0.55, 0.3, 0.15].slice(0, sorted.length);
-      let r = Math.random() * w.reduce((a, b) => a + b, 0), k = 0;
-      while (r > w[k] && k < w.length - 1) { r -= w[k]; k++; }
-      B = S.emp.get(sorted[k][0]);
+      target = weightedPick([...best.entries()].sort((a, b) => a[1] - b[1]).slice(0, 3))[0];
     }
-    return [A, B];
+    const B = S.emp.get(S.terr[target].owner);
+    let aCell = null, bd = Infinity;
+    for (const i of A.terr) { const d = S.terr[i].dist[target]; if (d < bd) { bd = d; aCell = i; } }
+    return { A, B, aCell: S.terr[aCell], bCell: S.terr[target] };
   }
 
   function nearestBetween(setA, setB) {
@@ -523,17 +561,23 @@
   const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
   const dieInner = (v) => { let s = ""; for (let i = 0; i < 9; i++) s += `<i class="${PIPS[v].includes(i) ? "on" : ""}"></i>`; return s; };
 
-  function renderSide(el, e, label) {
+  function renderSide(el, e, label, cell, m) {
     el.classList.remove("win", "lose");
     if (!e) { el.innerHTML = `<div class="sub">${label}</div><div style="height:118px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:30px">?</div>`; return; }
     const t = S.terr[e.id];
-    const capLeft = S.terr.filter((x) => x.code === t.code && x.owner === e.id).length;
-    const regInfo = t.nReg > 1 ? ` · ${capLeft}/${t.nReg} bölge` : "";
+    let title, sub;
+    if (cell) {
+      title = cell.city + (cell.isCap ? " ★" : "");
+      sub = cell.code !== t.code ? `${t.name} (${cell.name} şehri)` : `${t.name} · ${e.terr.size} şehir`;
+    } else {
+      title = t.name;
+      sub = `${empCountries(e)} ülke`;
+    }
     el.innerHTML = `<div class="sub">${label}</div>
       <img class="flag" src="${flagOf(t.code)}" alt="">
-      <div class="nm">${t.name}</div>
-      <div class="sub">${empCountries(e)} ülke${regInfo}</div>
-      <div class="mult">Çarpan ×${empMult(e).toFixed(2)}</div>
+      <div class="nm">${title}</div>
+      <div class="sub">${sub}</div>
+      <div class="mult">Çarpan ×${(m != null ? m : empMult(e)).toFixed(2)}</div>
       <div class="dice">${[1, 1, 1].map((v) => `<div class="die">${dieInner(v)}</div>`).join("")}</div>
       <div class="score">–</div><div class="calc"></div>`;
   }
@@ -552,7 +596,7 @@
 
   const roll3 = () => [1 + rnd(6), 1 + rnd(6), 1 + rnd(6)];
 
-  async function animateRoll(A, B, dA, dB, mA, mB, sp) {
+  async function animateRoll(nameA, nameB, dA, dB, sp) {
     const elA = $("sideA"), elB = $("sideB");
     const stopped = { A: [false, false, false], B: [false, false, false] };
     for (let i = 0; i < 3; i++) { setDie(elA, i, 1 + rnd(6), "roll"); setDie(elB, i, 1 + rnd(6), "roll"); }
@@ -570,11 +614,11 @@
         for (let i = 0; i < 3; i++) {
           stopped.A[i] = true; setDie(elA, i, dA[i], "stop"); sumA += dA[i];
           setScore(elA, String(sumA));
-          $("result").textContent = `${i + 1}. zar: ${S.terr[A.id].name} ${dA[i]} attı…`;
+          $("result").textContent = `${i + 1}. zar: ${nameA} ${dA[i]} attı…`;
           await nap(sp.step);
           stopped.B[i] = true; setDie(elB, i, dB[i], "stop"); sumB += dB[i];
           setScore(elB, String(sumB));
-          $("result").textContent = `${i + 1}. zar: ${S.terr[B.id].name} ${dB[i]} attı…`;
+          $("result").textContent = `${i + 1}. zar: ${nameB} ${dB[i]} attı…`;
           await nap(sp.step);
         }
       } else {
@@ -589,30 +633,44 @@
     setScore(el, fmt1(s), m !== 1 ? `${raw} × ${m.toFixed(2).replace(".", ",")}` : `${raw}`);
   }
 
+  function cityLabel(t, cls) {
+    const p = t.dotXY || t.xy;
+    if (!p) return;
+    gFx.append("text").attr("class", "flabel " + cls).attr("x", p[0]).attr("y", p[1] - 7).text(t.city);
+  }
+
   /* ---------------- Savaş ---------------- */
 
   async function battle(animated = true) {
     if (S.over) return;
     const pair = pickPair();
     if (!pair) return;
-    const [A, B] = pair;
+    const { A, B, aCell, bCell } = pair;
     const sp = SPEEDS[S.speed];
     const anim = animated && sp.roll > 0;
+    const mA = fightMult(A, aCell), mB = fightMult(B, bCell);
+    const nameA = aCell ? aCell.city : empName(A), nameB = bCell ? bCell.city : empName(B);
 
     gTerr.selectAll(".terr").classed("atk def", false);
     if (animated) {
-      for (const i of A.terr) S.terr[i].el.classed("atk", true);
-      for (const i of B.terr) S.terr[i].el.classed("def", true);
       gFx.selectAll("*").remove();
-      const [ta, tb] = nearestBetween(A.terr, B.terr);
-      const [x1, y1] = ta.xy, [x2, y2] = tb.xy;
+      let ta, tb;
+      if (aCell) {
+        ta = aCell; tb = bCell;
+        aCell.el.classed("atk", true); bCell.el.classed("def", true);
+      } else {
+        for (const i of A.terr) S.terr[i].el.classed("atk", true);
+        for (const i of B.terr) S.terr[i].el.classed("def", true);
+        [ta, tb] = nearestBetween(A.terr, B.terr);
+      }
+      const [x1, y1] = ta.dotXY || ta.xy, [x2, y2] = tb.dotXY || tb.xy;
       const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.25;
       gFx.append("path").attr("class", "bline").attr("d", `M${x1},${y1} Q${mx},${my} ${x2},${y2}`);
-      renderSide($("sideA"), A, "Saldıran");
-      renderSide($("sideB"), B, "Savunan");
+      if (aCell) { cityLabel(aCell, "la"); cityLabel(bCell, "lb"); }
+      renderSide($("sideA"), A, "Saldıran", aCell, mA);
+      renderSide($("sideB"), B, "Savunan", bCell, mB);
     }
 
-    const mA = empMult(A), mB = empMult(B);
     let dA, dB, sA, sB, ties = 0;
     while (true) {
       dA = roll3(); dB = roll3();
@@ -620,7 +678,7 @@
       sB = Math.round((dB[0] + dB[1] + dB[2]) * mB * 10) / 10;
       if (anim) {
         $("result").textContent = ties ? "Berabere! Zarlar yeniden atılıyor…" : "Zarlar atılıyor…";
-        await animateRoll(A, B, dA, dB, mA, mB, ties ? { ...sp, seq: false, roll: 700 } : sp);
+        await animateRoll(nameA, nameB, dA, dB, ties ? { ...sp, seq: false, roll: 700 } : sp);
       }
       if (animated) { showFinal($("sideA"), dA, mA, sA); showFinal($("sideB"), dB, mB, sB); }
       if (sA !== sB) break;
@@ -635,42 +693,58 @@
       $(Wn === A ? "sideA" : "sideB").classList.add("win");
       $(Wn === A ? "sideB" : "sideA").classList.add("lose");
     }
-
     const wn = S.terr[Wn.id], ln = S.terr[L.id];
 
-    // Kaybedenin başkenti dışında bölgesi kaldıysa sadece bir bölgesini kaybeder
-    const spare = [...L.terr].filter((i) => S.terr[i].code === ln.code && !S.terr[i].isCap);
-    let taken, fell;
-    if (spare.length) {
-      const [, tgt] = nearestBetween(Wn.terr, spare);
-      taken = [tgt.idx]; fell = false;
-    } else {
-      taken = [...L.terr]; fell = true;
-    }
+    // Ne el değiştirecek?
+    let taken;
+    if (isCity()) {
+      let c;
+      if (Wn === A) c = bCell.idx; // saldıran kazandı: hedef şehri alır
+      else {
+        // saldıran kaybetti: savunana en yakın kendi şehrini kaybeder (başkent en son)
+        const code = S.terr[L.id].code;
+        const homes = [...L.terr].filter((i) => i !== L.id && S.terr[i].code === code);
+        c = homes.length ? nearestBetween(Wn.terr, homes)[1].idx : L.id;
+      }
+      taken = c === L.id ? [...L.terr] : [c];
+    } else taken = [...L.terr];
 
     for (const i of taken) {
       const t = S.terr[i];
       L.terr.delete(i); t.owner = Wn.id; Wn.terr.add(i);
-      if (animated) { paintTerr(t); t.el.classed("flash", false); t.el.node().getBoundingClientRect(); t.el.classed("flash", true); }
+      if (animated) {
+        paintTerr(t);
+        const el = t.tinyEl || t.el;
+        el.classed("flash", false); el.node().getBoundingClientRect(); el.classed("flash", true);
+      }
     }
     S.battles++;
+    const fell = L.terr.size === 0;
+    if (fell) L.alive = false;
     if (lM - wM > 0 && (!S.upset || lM - wM > S.upset.gap)) S.upset = { gap: lM - wM, w: Wn.id, l: L.id };
 
     let msg, resHTML;
-    if (fell) {
-      L.alive = false;
+    if (isCity()) {
+      if (fell) {
+        const cap = ln.city, n = taken.length;
+        if (!S.biggest || n > S.biggest.n) S.biggest = { n, w: Wn.id, l: L.id };
+        const extra = n > 1 ? ` ${n} şehir el değiştirdi!` : "";
+        msg = `<b>${wn.name}</b> <span class="x">→</span> ${cap} ★ düştü, <b>${ln.name}</b> oyundan çıktı${n > 1 ? ` (${n} şehir)` : ""}`;
+        resHTML = `<span class="rw">🏆 ${wn.name} kazandı!</span><br><span class="rl">Başkent ${cap} düştü, ${ln.name} oyundan çıktı!${extra}</span>`;
+      } else {
+        const t = S.terr[taken[0]];
+        const own = t.code !== ln.code ? ` (${t.name} şehri)` : "";
+        const capNext = ownCitiesLeft(L) === 0 ? ` Başkent ${ln.city} artık savunmasız!` : "";
+        msg = `<b>${wn.name}</b> <span class="x">→</span> ${t.city}${own} alındı`;
+        resHTML = `<span class="rw">🏆 ${wn.name} kazandı!</span><br><span class="rl">${t.city} artık ${wn.name} bayrağı altında.${capNext}</span>`;
+      }
+    } else {
       const cnt = new Set(taken.map((i) => S.terr[i].code)).size;
       if (!S.biggest || cnt > S.biggest.n) S.biggest = { n: cnt, w: Wn.id, l: L.id };
-      const capTxt = ln.nReg > 1 ? " başkentini aldı ve" : "";
       msg = cnt > 1
-        ? `<b>${wn.name}</b> <span class="x">→</span> ${ln.name}${capTxt} imparatorluğunu yıktı (${cnt} ülke)`
-        : `<b>${wn.name}</b> <span class="x">→</span> ${ln.name}${ln.nReg > 1 ? " başkenti düştü" : " fethedildi"}`;
-      resHTML = `<span class="rw">🏆 ${wn.name} kazandı!</span><br><span class="rl">${ln.name}${ln.nReg > 1 ? " başkentini kaybetti ve" : ""} fethedildi${cnt > 1 ? ` (${cnt} ülke el değiştirdi)` : ""}</span>`;
-    } else {
-      const t = S.terr[taken[0]];
-      const left = spare.length - 1;
-      msg = `<b>${wn.name}</b> <span class="x">→</span> ${ln.name} ${t.rname} bölgesini aldı`;
-      resHTML = `<span class="rw">🏆 ${wn.name} kazandı!</span><br><span class="rl">${ln.name} ${t.rname} bölgesini kaybetti. ${left ? `${left} bölge ve` : "Sadece"} başkenti kaldı!</span>`;
+        ? `<b>${wn.name}</b> <span class="x">→</span> ${ln.name} imparatorluğunu yıktı (${cnt} ülke)`
+        : `<b>${wn.name}</b> <span class="x">→</span> ${ln.name} fethedildi`;
+      resHTML = `<span class="rw">🏆 ${wn.name} kazandı!</span><br><span class="rl">${ln.name} fethedildi${cnt > 1 ? ` (${cnt} ülke el değiştirdi)` : ""}</span>`;
     }
     addLog(wn.code, msg);
     if (animated) $("result").innerHTML = resHTML;
@@ -706,18 +780,18 @@
     const alive = aliveEmpires();
     $("hudAlive").textContent = alive.length;
     $("hudBattles").textContent = S.battles;
-    const top = alive.map((e) => ({ e, c: empCountries(e), p: empPop(e) }))
+    const top = alive.map((e) => ({ e, c: empSize(e), p: empPop(e) }))
       .sort((a, b) => b.c - a.c || b.p - a.p).slice(0, 10);
     $("lb").innerHTML = top.map(({ e, c }, i) => {
       const t = S.terr[e.id];
       const pl = S.players.filter((p) => p.idx === e.id).map((p) => `<span class="pl" style="background:${p.color}" title="${p.name}"></span>`).join("");
-      return `<li><span class="rk">${i + 1}</span><img src="${flagOf(t.code)}" alt=""><span class="n">${t.name}${pl}</span><span class="c">${c} ülke · ×${empMult(e).toFixed(2)}</span></li>`;
+      return `<li><span class="rk">${i + 1}</span><img src="${flagOf(t.code)}" alt=""><span class="n">${t.name}${pl}</span><span class="c">${c} ${sizeWord()}${isCity() && S.mult !== "empire" ? "" : ` · ×${empMult(e).toFixed(2)}`}</span></li>`;
     }).join("");
     if (S.players.length) {
       $("playersCard").style.display = "";
       $("players").innerHTML = S.players.map((p) => {
         const t = S.terr[p.idx]; const e = S.emp.get(p.idx);
-        const st = p.out ? `${p.place}. oldu` : `${empCountries(e)} ülke`;
+        const st = p.out ? `${p.place}. oldu` : `${empSize(e)} ${sizeWord()}`;
         return `<div class="pchip ${p.out ? "out" : ""}" style="border-color:${p.color}"><img src="${flagOf(t.code)}" alt=""><b>${p.name}</b> <span style="color:var(--muted)">${t.name}</span><span class="st">${st}</span></div>`;
       }).join("");
     } else $("playersCard").style.display = "none";
@@ -726,13 +800,17 @@
     $("btnSkip").disabled = done;
     $("btnAuto").disabled = done;
     $("btnAuto").textContent = S.running ? "⏸ Durdur" : "▶ Otomatik";
+    $("modeChip").textContent = isCity() ? "🏙 Şehir Savaşı" : "🌍 Klasik";
   }
 
   function finish() {
     S.over = true; S.running = false;
+    gFx.selectAll("*").remove();
+    gTerr.selectAll(".terr").classed("atk def", false);
     updateUI();
     const champ = aliveEmpires()[0];
     const t = S.terr[champ.id];
+    $("result").innerHTML = `<span class="rw">👑 ${t.name} dünyanın hakimi!</span>`;
     let pl = "";
     if (S.players.length) {
       const winner = S.players.find((p) => p.idx === champ.id);
@@ -743,7 +821,9 @@
       }
     }
     const up = S.upset ? `${S.terr[S.upset.w].name} → ${S.terr[S.upset.l].name}` : "–";
-    const bg = S.biggest ? `${S.terr[S.biggest.w].name} (${S.biggest.n} ülke aldı)` : "–";
+    const last = isCity()
+      ? `<div>En büyük çöküş<b>${S.biggest ? `${S.terr[S.biggest.l].name} (${S.biggest.n} şehir)` : "–"}</b></div>`
+      : `<div>En büyük tek fetih<b>${S.biggest ? `${S.terr[S.biggest.w].name} (${S.biggest.n} ülke aldı)` : "–"}</b></div>`;
     $("winBox").innerHTML = `<h2>DÜNYANIN <span>HAKİMİ</span></h2>
       <img src="${flagOf(t.code)}" alt="">
       <div style="font-family:Bungee,Rubik;font-size:28px">${t.name}</div>
@@ -752,7 +832,7 @@
         <div>Toplam savaş<b>${S.battles}</b></div>
         <div>Başlangıç nüfusu<b>${fmtPop(CD.pop[t.code])}</b></div>
         <div>En büyük sürpriz<b>${up}</b></div>
-        <div>En büyük tek fetih<b>${bg}</b></div>
+        ${last}
       </div>
       <div class="controls"><button class="btn ghost" id="wClose">Haritaya bak</button><button class="btn or" id="wNew">Yeni Oyun</button></div>`;
     $("winModal").classList.add("show");
@@ -798,7 +878,7 @@
     $("result").textContent = "Sonuç hesaplanıyor…";
     await sleep(20);
     let guard = 0;
-    while (!S.over && guard++ < 5000) await battle(false);
+    while (!S.over && guard++ < 20000) await battle(false);
     S.busy = false;
     refreshAll();
   }
@@ -818,20 +898,32 @@
   /* ---------------- Kurulum ekranı ---------------- */
 
   let setupRows = [];
+  let setupMode = "classic";
+
   function openSetup() {
     S.running = false;
     if (!setupRows.length) setupRows = [{ name: "Oyuncu 1", code: "?" }, { name: "Oyuncu 2", code: "?" }];
+    setupMode = S.mode;
     renderSetup();
     $("setup").classList.add("show");
   }
 
   function countryOptions(sel) {
     let s = `<option value="">— Ülke seç —</option><option value="?" ${sel === "?" ? "selected" : ""}>🎲 Rastgele</option>`;
-    for (const t of S.terr) if (t.isCap) s += `<option value="${t.code}" ${sel === t.code ? "selected" : ""}>${t.name}${t.nReg > 1 ? ` (${t.nReg} bölge)` : ""}</option>`;
+    const seen = new Set();
+    for (const t of S.terr) {
+      if (!t.isCap || seen.has(t.code)) continue;
+      seen.add(t.code);
+      const nc = setupMode === "city" ? (CITIES[t.code] ? CITIES[t.code].length : 1) : 0;
+      s += `<option value="${t.code}" ${sel === t.code ? "selected" : ""}>${t.name}${nc > 1 ? ` (${nc} şehir)` : ""}</option>`;
+    }
     return s;
   }
 
   function renderSetup() {
+    document.querySelectorAll("#modePick .mode").forEach((el) => el.classList.toggle("on", el.dataset.v === setupMode));
+    $("rulesClassic").style.display = setupMode === "classic" ? "" : "none";
+    $("rulesCity").style.display = setupMode === "city" ? "" : "none";
     $("prows").innerHTML = setupRows.map((r, i) => `
       <div class="prow">
         <span class="dot" style="background:${PLAYER_COLORS[i]}"></span>
@@ -846,13 +938,14 @@
   }
 
   function startFromSetup() {
+    if (builtMode !== setupMode) buildMap(setupMode);
     const used = new Set();
     const players = [];
     const caps = S.terr.filter((t) => t.isCap);
     setupRows.forEach((r, i) => {
       if (!r.code) return;
       let code = r.code;
-      if (code === "?" || used.has(code)) {
+      if (code === "?" || used.has(code) || S.capIdx[code] == null) {
         const pool = caps.filter((t) => !used.has(t.code));
         code = pool[rnd(pool.length)].code;
       }
@@ -872,7 +965,8 @@
     try {
       const [features, flags] = await Promise.all([loadWorld(), loadFlags()]);
       S.flags = flags;
-      buildMap(features);
+      RAW_FEATURES = features;
+      buildMap("classic");
       $("loading").style.display = "none";
       resetGame();
       openSetup();
@@ -887,6 +981,7 @@
     $("btnSkip").onclick = skipToEnd;
     $("btnNew").onclick = openSetup;
     $("startGame").onclick = startFromSetup;
+    document.querySelectorAll("#modePick .mode").forEach((el) => (el.onclick = () => { setupMode = el.dataset.v; renderSetup(); }));
     $("addP").onclick = () => { if (setupRows.length < PLAYER_COLORS.length) { setupRows.push({ name: `Oyuncu ${setupRows.length + 1}`, code: "?" }); renderSetup(); } };
     $("randAll").onclick = () => { setupRows.forEach((r) => (r.code = "?")); renderSetup(); };
     $("btnFs").onclick = () => {
