@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bilye Yarışı · TheBullucks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#050b17;--panel:#0b1a33;--panel2:#0f2344;--line:#1d3a66;--cyan:#3fb6f0;--cyan2:#7fd3ff;--orange:#f07a2a;--orange2:#ffa15c;--text:#e8f1ff;--muted:#8aa3c7;--win:#46d39a;--lose:#ff5d6c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Rubik,system-ui,sans-serif}
+button{font-family:inherit}
+.app{display:grid;grid-template-rows:auto 1fr;height:100vh;height:100dvh}
+header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#071430,#0b1f45)}
+header img{width:40px;height:40px;border-radius:50%;box-shadow:0 0 14px rgba(63,182,240,.5)}
+header h1{font-family:Bungee,Rubik,sans-serif;font-size:20px;margin:0}
+header h1 span{color:var(--orange)}
+header .sp{flex:1}
+.hbtn{background:transparent;border:1px solid var(--line);color:var(--text);padding:7px 12px;border-radius:10px;cursor:pointer;font-size:14px;text-decoration:none;display:inline-flex;gap:6px;align-items:center}
+.hbtn:hover{border-color:var(--cyan)}
+.main{display:grid;grid-template-columns:1fr 340px;min-height:0}
+.stage{position:relative;min-height:0;overflow:hidden;background:#061226}
+#cv{width:100%;height:100%;display:block;cursor:pointer}
+.hud{position:absolute;left:12px;top:12px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+.chip{background:rgba(11,26,51,.88);border:1px solid var(--line);padding:6px 10px;border-radius:999px;font-size:13px}
+.chip b{color:var(--cyan2)}
+#count{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-family:Bungee,Rubik;font-size:120px;color:var(--orange);text-shadow:0 0 40px rgba(240,122,42,.7),0 6px 0 #000;pointer-events:none}
+#count.show{display:flex;animation:pop .8s ease}
+@keyframes pop{0%{transform:scale(2);opacity:0}30%{transform:scale(1);opacity:1}100%{opacity:.9}}
+#caster{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);background:rgba(5,11,23,.9);border:1px solid var(--orange);border-radius:14px;padding:10px 18px;font-weight:800;font-size:17px;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;display:flex;gap:8px;align-items:center}
+#caster.show{opacity:1}
+#caster img{width:28px;height:19px;border-radius:3px;object-fit:cover}
+aside{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.card{padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h3{margin:0 0 8px;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{border:none;border-radius:12px;padding:11px;font-weight:800;font-size:15px;cursor:pointer;color:#071430;background:var(--cyan)}
+.btn:hover{filter:brightness(1.1)}
+.btn.or{background:var(--orange);color:#1b0b00}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:600;font-size:13px;padding:9px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.full{grid-column:1/-1}
+.row{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:13px;color:var(--muted)}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:1}
+.seg button{flex:1;background:transparent;border:none;color:var(--muted);padding:7px 4px;font-size:12px;cursor:pointer}
+.seg button.on{background:var(--panel2);color:var(--text);font-weight:700;box-shadow:inset 0 -2px 0 var(--cyan)}
+.standings{flex:1;overflow:auto;padding:6px 8px 12px}
+.st{display:grid;grid-template-columns:24px 26px 1fr auto;gap:8px;align-items:center;padding:5px 6px;border-radius:8px;font-size:13px;cursor:pointer}
+.st:hover{background:rgba(63,182,240,.08)}
+.st.sel{background:rgba(240,122,42,.15);outline:1px solid var(--orange)}
+.st img{width:24px;height:16px;border-radius:3px;object-fit:cover}
+.st .p{color:var(--muted);font-weight:800;text-align:right}
+.st .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .g{font-size:12px;color:var(--cyan2);font-weight:700}
+.st.fin .g{color:var(--win)}
+.st.out{opacity:.4}
+.st .pl{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:5px}
+.medal{font-size:15px}
+.log{font-size:12px;max-height:110px;overflow:auto;display:flex;flex-direction:column;gap:4px;color:var(--muted)}
+.log b{color:var(--text)}
+.modal{position:fixed;inset:0;background:rgba(2,6,14,.8);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+.modal.show{display:flex}
+.mbox{background:var(--panel);border:1px solid var(--line);border-radius:20px;max-width:640px;width:100%;padding:22px;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.mbox h2{font-family:Bungee,Rubik;margin:0 0 6px;font-size:24px}
+.mbox h2 span{color:var(--orange)}
+.mbox p{color:var(--muted);margin:0 0 12px;line-height:1.5;font-size:14px}
+.lbl{font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;font-weight:700}
+.tracks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.tcard{background:var(--panel2);border:2px solid var(--line);border-radius:14px;padding:10px;text-align:left;color:var(--text);cursor:pointer;font-family:inherit}
+.tcard .e{font-size:24px}
+.tcard b{display:block;margin:4px 0 2px;font-size:14px}
+.tcard small{color:var(--muted);font-size:11.5px;line-height:1.35}
+.tcard.on{border-color:var(--orange);box-shadow:0 0 0 3px rgba(240,122,42,.2)}
+.prow{display:grid;grid-template-columns:14px 1fr 1.3fr 36px;gap:8px;align-items:center;margin-bottom:8px}
+.prow .dot{width:14px;height:14px;border-radius:50%}
+.prow input,.prow select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:9px;font-size:14px;font-family:inherit;width:100%}
+.prow button{height:36px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.podium{display:flex;align-items:flex-end;justify-content:center;gap:10px;margin:16px 0}
+.pod{text-align:center;width:150px}
+.pod img{width:84px;height:56px;object-fit:cover;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+.pod .nm{font-weight:800;margin:6px 0 4px;font-size:14px}
+.pod .bar{border-radius:10px 10px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:8px;font-family:Bungee,Rubik;font-size:26px;color:#071430}
+.pod.p1 .bar{height:120px;background:linear-gradient(#ffe27a,#d9a92a)}
+.pod.p2 .bar{height:86px;background:linear-gradient(#e6eef8,#9fb0c6)}
+.pod.p3 .bar{height:64px;background:linear-gradient(#f2b27a,#b56c34)}
+.pod .t{font-size:12px;color:var(--muted)}
+.reslist{columns:2;font-size:13px;color:var(--muted);margin:10px 0}
+.reslist div{break-inside:avoid;padding:2px 0}
+.reslist .q{color:var(--win)}
+.reslist .x{color:var(--lose);text-decoration:line-through}
+@media (max-width:900px){
+  .main{grid-template-columns:1fr;grid-template-rows:62vh auto;overflow:auto}
+  aside{border-left:none;border-top:1px solid var(--line)}
+  .app{height:auto;min-height:100vh}
+  .standings{max-height:none}
+  .hide-sm{display:none}
+  #count{font-size:80px}
+  #caster{font-size:14px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <a href="../../index.html"><img src="../../assets/logo.jpg" alt="TheBullucks"></a>
+    <h1>BİLYE <span>YARIŞI</span></h1>
+    <div class="sp"></div>
+    <button class="hbtn" id="btnNew">⚙️ Yeni Yarış</button>
+    <button class="hbtn hide-sm" id="btnFs">⛶ Tam ekran</button>
+    <a class="hbtn hide-sm" href="../../index.html">← Oyunlar</a>
+  </header>
+  <div class="main">
+    <div class="stage" id="stage">
+      <canvas id="cv"></canvas>
+      <div class="hud">
+        <div class="chip" id="hudTrack">–</div>
+        <div class="chip">Süre: <b id="hudTime">0,0</b></div>
+        <div class="chip">Finiş: <b id="hudFin">0</b></div>
+      </div>
+      <div id="count"></div>
+      <div id="caster"></div>
+    </div>
+    <aside>
+      <div class="card">
+        <div class="controls">
+          <button class="btn or" id="btnPlay">⏸ Duraklat</button>
+          <button class="btn ghost" id="btnRestart">↻ Yeniden</button>
+        </div>
+        <div class="row">Hız
+          <div class="seg" id="segSpeed"><button data-v="1" class="on">1×</button><button data-v="2">2×</button><button data-v="4">4×</button></div>
+        </div>
+        <div class="row">Kamera
+          <div class="seg" id="segCam"><button data-v="leader" class="on">Lider</button><button data-v="pack">Grup</button><button data-v="wide">Geniş</button></div>
+        </div>
+      </div>
+      <div class="card"><h3>Yorumcu</h3><div class="log" id="log"></div></div>
+      <div class="card" style="border-bottom:none;padding-bottom:0"><h3>Canlı sıralama <span style="text-transform:none;letter-spacing:0;font-weight:400">(takip etmek için tıkla)</span></h3></div>
+      <div class="standings" id="standings"></div>
+    </aside>
+  </div>
+</div>
+
+<div class="modal" id="setup">
+  <div class="mbox">
+    <h2>BİLYE <span>YARIŞI</span></h2>
+    <p>Her ülke bayraklı bir bilye. Engellerle dolu parkurda ilk finişe ulaşan kazanır! Tamamen fizik ve şans: nüfus yok, çarpan yok.</p>
+    <div class="lbl">Parkur</div>
+    <div class="tracks" id="tracks"></div>
+    <div class="lbl">Mod</div>
+    <div class="seg" id="segMode"><button data-v="race" class="on">🏁 Tek Yarış</button><button data-v="elim">🔥 Eleme Turnuvası</button></div>
+    <p id="modeInfo" style="margin-top:8px;font-size:13px"></p>
+    <div class="lbl">Bilye sayısı</div>
+    <div class="seg" id="segCount"><button data-v="8">8</button><button data-v="16">16</button><button data-v="24">24</button><button data-v="32" class="on">32</button><button data-v="48">48</button></div>
+    <div class="row" style="margin-top:10px">Ülkeler
+      <div class="seg" id="segPool"><button data-v="random" class="on">🎲 Rastgele</button><button data-v="big">👥 En kalabalık</button><button data-v="europe">🇪🇺 Avrupa</button></div>
+    </div>
+    <div class="lbl">Oyuncular (isteğe bağlı) — seçilen ülkeler yarışa mutlaka girer</div>
+    <div id="prows"></div>
+    <div class="controls" style="margin-top:8px">
+      <button class="btn ghost" id="addP">+ Oyuncu ekle</button>
+      <button class="btn or" id="startBtn">Yarışı Başlat</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="resModal"><div class="mbox" id="resBox"></div></div>
+
+<script src="../dunya-fethi/countries.js"></script>
+<script src="engine.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
