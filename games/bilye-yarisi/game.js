@@ -64,7 +64,9 @@
   /* ---------------- Kurulum ---------------- */
   let setupRows = [{ name: "Oyuncu 1", code: "" }, { name: "Oyuncu 2", code: "" }];
 
-  const countryList = () => Object.keys(CD.names).filter((c) => CD.pop[c] >= 0.3 && c.length === 2 && CD.names[c]).sort((a, b) => CD.names[a].localeCompare(CD.names[b], "tr"));
+  // Bağımlı bölgeler (yarışa girmez)
+  const TERRITORIES = new Set("PR GL FK HK MO GF NC PF GP MQ RE YT PM SH SX MF BL AI MS TC WF MP BQ NF IO SJ TK NU CK AS GU VI VG KY BM AW CW FO GI IM JE GG AX EH TF HM GS BV UM CC CX PN AQ".split(" "));
+  const countryList = () => Object.keys(CD.pop).filter((c) => CD.pop[c] >= 0.0009 && /^[A-Z]{2}$/.test(c) && CD.names[c] && !TERRITORIES.has(c)).sort((a, b) => CD.names[a].localeCompare(CD.names[b], "tr"));
 
   function renderSetup() {
     $("tracks").innerHTML = E.TRACKS.map((t) => `<button class="tcard ${t.id === S.track.id ? "on" : ""}" data-id="${t.id}"><span class="e">${t.emoji}</span><b>${t.name}</b><small>${t.desc}</small></button>`).join("");
@@ -103,7 +105,7 @@
     let pool = all.filter((c) => !used.has(c));
     if (S.pool === "big") pool.sort((a, b) => CD.pop[b] - CD.pop[a]);
     else { if (S.pool === "europe") pool = pool.filter((c) => EUROPE.includes(c)); pool.sort(() => Math.random() - 0.5); }
-    const codes = [...used, ...pool].slice(0, Math.max(S.count, used.size));
+    const codes = S.count === "all" ? [...used, ...pool] : [...used, ...pool].slice(0, Math.max(S.count, used.size));
     S.players = players;
     return codes.map((code) => ({ code, name: CD.names[code] || code }));
   }
@@ -455,7 +457,7 @@
     segInit("segSpeed", (v) => (S.speed = +v));
     segInit("segCam", (v) => { S.cam = v; S.follow = null; });
     segInit("segMode", (v) => { S.mode = v; renderSetup(); });
-    segInit("segCount", (v) => (S.count = +v));
+    segInit("segCount", (v) => (S.count = v === "all" ? "all" : +v));
     segInit("segPool", (v) => (S.pool = v));
     $("addP").onclick = () => { if (setupRows.length < PLAYER_COLORS.length) { setupRows.push({ name: `Oyuncu ${setupRows.length + 1}`, code: "" }); renderSetup(); } };
     $("startBtn").onclick = newTournament;
@@ -468,6 +470,8 @@
     // arka planda bir tanıtım yarışı dönsün, kurulum ekranı açık
     S.entrants = []; S.players = [];
     S.demo = true;
+    const allBtn = document.querySelector('#segCount button[data-v="all"]');
+    if (allBtn) allBtn.textContent = `🌍 Tümü (${countryList().length})`;
     startRace(pickEntrants(), S.track);
     S.state = "racing"; E.openGate(S.world);
     openSetup(); S.paused = false;

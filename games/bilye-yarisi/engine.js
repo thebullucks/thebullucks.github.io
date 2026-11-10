@@ -370,22 +370,30 @@
       if (m.x < 22 + R) { m.x = 22 + R; if (m.vx < 0) m.vx = -m.vx * 0.4; }
       if (m.x > W - 22 - R) { m.x = W - 22 - R; if (m.vx > 0) m.vx = -m.vx * 0.4; }
     }
-    // bilye-bilye
-    const n = ms.length, rr = 2 * R, rr2 = rr * rr;
+    // bilye-bilye (ızgara ile yakın komşular)
+    const n = ms.length, rr = 2 * R, rr2 = rr * rr, CS = 2 * R + 2;
+    const hash = new Map();
     for (let i = 0; i < n; i++) {
-      const a = ms[i];
-      for (let j = i + 1; j < n; j++) {
-        const b = ms[j];
-        const dy = b.y - a.y;
-        if (dy > rr || dy < -rr) continue;
-        const dx = b.x - a.x, d2 = dx * dx + dy * dy;
-        if (d2 >= rr2 || d2 === 0) continue;
-        const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, pen = (rr - d) / 2;
-        a.x -= nx * pen; a.y -= ny * pen; b.x += nx * pen; b.y += ny * pen;
-        const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-        if (vn < 0) {
-          const jj = -(1 + 0.6) * vn / 2;
-          a.vx -= jj * nx; a.vy -= jj * ny; b.vx += jj * nx; b.vy += jj * ny;
+      const m = ms[i], k = Math.floor(m.x / CS) * 100000 + Math.floor(m.y / CS);
+      let a = hash.get(k); if (!a) hash.set(k, (a = [])); a.push(i);
+    }
+    for (let i = 0; i < n; i++) {
+      const a = ms[i], gx = Math.floor(a.x / CS), gy = Math.floor(a.y / CS);
+      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+        const cell = hash.get((gx + ox) * 100000 + gy + oy);
+        if (!cell) continue;
+        for (const j of cell) {
+          if (j <= i) continue;
+          const b = ms[j];
+          const dx = b.x - a.x, dy = b.y - a.y, d2 = dx * dx + dy * dy;
+          if (d2 >= rr2 || d2 === 0) continue;
+          const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, pen = (rr - d) / 2;
+          a.x -= nx * pen; a.y -= ny * pen; b.x += nx * pen; b.y += ny * pen;
+          const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+          if (vn < 0) {
+            const jj = -(1 + 0.6) * vn / 2;
+            a.vx -= jj * nx; a.vy -= jj * ny; b.vx += jj * nx; b.vy += jj * ny;
+          }
         }
       }
     }
