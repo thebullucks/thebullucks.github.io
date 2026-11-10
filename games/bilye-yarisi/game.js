@@ -124,6 +124,7 @@
     S.world = E.createWorld(track, entrants);
     S.state = "countdown"; S.countdownT = 0; S.shownCount = null; S.paused = false;
     S.thirdAt = null; S.leaderId = null; S.follow = null; S.lastCast = 0;
+    castLock = 0; $("caster").classList.remove("show", "big");
     S.camY = S.world.T.spawnY;
     entrants.forEach((e) => ballImage(e.code));
     const keep = keepCount();
@@ -210,12 +211,34 @@
     const d = document.createElement("div"); d.innerHTML = html;
     const l = $("log"); l.prepend(d); while (l.children.length > 30) l.lastChild.remove();
   }
-  let castTimer = null;
+  let castTimer = null, castLock = 0;
+  function hideCasterAt(ms) {
+    clearTimeout(castTimer);
+    castTimer = setTimeout(() => { const el = $("caster"); el.classList.remove("show"); setTimeout(() => el.classList.remove("big"), 300); }, ms);
+  }
   function cast(code, text) {
+    if (performance.now() < castLock) return; // kazanan duyurusu ekrandayken üstüne yazma
     const el = $("caster");
+    el.classList.remove("big");
     el.innerHTML = (code ? `<img src="${flagOf(code)}" alt="">` : "") + text;
     el.classList.add("show");
-    clearTimeout(castTimer); castTimer = setTimeout(() => el.classList.remove("show"), 2200);
+    hideCasterAt(2200);
+  }
+  // Kazanan duyurusu: büyük, uzun süre kalır; 2. ve 3. altına eklenir
+  function castWinner(m) {
+    const el = $("caster");
+    el.innerHTML = `<div class="cw"><img src="${flagOf(m.code)}" alt="">🥇 ${m.name} KAZANDI!${plTag(m.code)}</div><div class="ct">${fmtT(m.finishTime)} saniye</div><div class="cs" id="casterSub"></div>`;
+    el.classList.add("big", "show");
+    castLock = performance.now() + 7000;
+    hideCasterAt(7000);
+  }
+  function castPodium(m) {
+    const sub = $("casterSub");
+    if (!sub || performance.now() > castLock) return cast(m.code, `${["🥇", "🥈", "🥉"][m.place - 1]} ${m.name} ${m.place}. oldu! (${fmtT(m.finishTime)} sn)`);
+    sub.insertAdjacentHTML("beforeend", `<span><img src="${flagOf(m.code)}" alt="">${["🥇", "🥈", "🥉"][m.place - 1]} ${m.name}</span>`);
+    // en az 3 saniye daha görünsün
+    const left = castLock - performance.now();
+    if (left < 3000) { castLock = performance.now() + 3000; hideCasterAt(3000); }
   }
 
   function handleEvents() {
@@ -230,7 +253,7 @@
       if (ev.type === "finish") {
         const medal = ["🥇", "🥈", "🥉"][m.place - 1];
         if (m.place <= 3 || playerOf(m.code)) sfx("ding", m.place);
-        if (medal) { cast(m.code, `${medal} ${m.name} ${m.place}. oldu! (${fmtT(m.finishTime)} sn)`); log(`${medal} <b>${m.name}</b>${plTag(m.code)} finişte! ${fmtT(m.finishTime)} sn`); }
+        if (medal) { if (m.place === 1) castWinner(m); else castPodium(m); log(`${medal} <b>${m.name}</b>${plTag(m.code)} finişte! ${fmtT(m.finishTime)} sn`); }
         else if (playerOf(m.code)) log(`🏁 <b>${m.name}</b>${plTag(m.code)} ${m.place}. sırada bitirdi`);
         if (m.place === 3) S.thirdAt = w.raceTime;
       } else if (ev.type === "stuck") {
@@ -248,8 +271,10 @@
     }
     // bitiş koşulları
     const n = w.marbles.length, keep = keepCount();
-    if (S.mode === "elim" && keep > 1) { if (w.finishedCount >= keep) setTimeout(endRace, 1500), (S.state = "ending"); }
-    else if (w.finishedCount >= n || (S.thirdAt !== null && w.raceTime - S.thirdAt > 20) || w.raceTime > 240) { S.state = "ending"; setTimeout(endRace, 1500); }
+    // sonuç penceresi, kazanan duyurusu ekrandan kalkmadan açılmasın
+    const wait = () => Math.max(1500, castLock - performance.now() + 300);
+    if (S.mode === "elim" && keep > 1) { if (w.finishedCount >= keep) { S.state = "ending"; setTimeout(endRace, wait()); } }
+    else if (w.finishedCount >= n || (S.thirdAt !== null && w.raceTime - S.thirdAt > 20) || w.raceTime > 240) { S.state = "ending"; setTimeout(endRace, wait()); }
   }
 
   /* ---------------- Sıralama paneli ---------------- */

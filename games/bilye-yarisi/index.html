@@ -32,6 +32,14 @@ header .sp{flex:1}
 #caster{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);background:rgba(5,11,23,.9);border:1px solid var(--orange);border-radius:14px;padding:10px 18px;font-weight:800;font-size:17px;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;display:flex;gap:8px;align-items:center}
 #caster.show{opacity:1}
 #caster img{width:28px;height:19px;border-radius:3px;object-fit:cover}
+#caster.big{flex-direction:column;gap:4px;border:2px solid #ffd84a;padding:14px 28px;box-shadow:0 0 40px rgba(255,216,74,.35);bottom:28px}
+#caster .cw{font-family:Bungee,Rubik;font-size:28px;color:#ffd84a;display:flex;gap:10px;align-items:center}
+#caster .cw img{width:44px;height:30px}
+#caster .ct{font-size:14px;color:var(--muted);font-weight:600}
+#caster .cs{display:flex;gap:14px;font-size:16px}
+#caster .cs:empty{display:none}
+#caster .cs span{display:flex;gap:6px;align-items:center}
+#caster .cs img{width:24px;height:16px}
 aside{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .card{padding:12px 14px;border-bottom:1px solid var(--line)}
 .card h3{margin:0 0 8px;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
@@ -98,6 +106,8 @@ aside{border-left:1px solid var(--line);background:var(--panel);display:flex;fle
   .hide-sm{display:none}
   #count{font-size:80px}
   #caster{font-size:14px}
+  #caster .cw{font-size:18px}
+  #caster .cs{font-size:13px}
 }
 </style>
 </head>
