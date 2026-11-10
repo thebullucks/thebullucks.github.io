@@ -7,6 +7,7 @@
   const PLAYER_COLORS = ["#ffd84a", "#ff4dd2", "#46d39a", "#ff7b39", "#7fd3ff", "#b388ff"];
   const EUROPE = "AL AD AT BY BE BA BG HR CY CZ DK EE FI FR DE GR HU IS IE IT XK LV LI LT LU MT MD MC ME NL MK NO PL PT RO RU SM RS SK SI ES SE CH TR UA GB".split(" ");
   const fmtT = (s) => s.toFixed(1).replace(".", ",");
+  const sfx = (name, ...a) => { if (!S.demo && window.SFX) window.SFX[name](...a); };
 
   /* ---------------- Bayraklar ---------------- */
   const FLAG_URI = {}, FLAG_SIZED = {}, BALL = {};
@@ -170,6 +171,7 @@
   }
 
   function showResults(st) {
+    sfx("fanfare");
     const champ = st[0];
     const isFinal = S.mode === "elim";
     const pl = S.players.length ? `<p style="color:var(--text)">${S.players.map((p) => { const i = st.findIndex((m) => m.code === p.code); return `<b style="color:${p.color}">${p.name}</b>: ${i >= 0 ? i + 1 + "." : "elendi"}`; }).join(" · ")}</p>` : "";
@@ -185,6 +187,7 @@
   }
 
   function showRound(st, keep) {
+    sfx("win");
     const q = st.slice(0, keep), out = st.slice(keep);
     S.eliminated.push(...out);
     $("resBox").innerHTML = `<h2>${roundName(st.length).toUpperCase()} <span>BİTTİ</span></h2>
@@ -226,6 +229,7 @@
       const ev = w.events.shift(), m = ev.m;
       if (ev.type === "finish") {
         const medal = ["🥇", "🥈", "🥉"][m.place - 1];
+        if (m.place <= 3 || playerOf(m.code)) sfx("ding", m.place);
         if (medal) { cast(m.code, `${medal} ${m.name} ${m.place}. oldu! (${fmtT(m.finishTime)} sn)`); log(`${medal} <b>${m.name}</b>${plTag(m.code)} finişte! ${fmtT(m.finishTime)} sn`); }
         else if (playerOf(m.code)) log(`🏁 <b>${m.name}</b>${plTag(m.code)} ${m.place}. sırada bitirdi`);
         if (m.place === 3) S.thirdAt = w.raceTime;
@@ -238,7 +242,7 @@
       let lead = null;
       for (const m of w.marbles) if (!lead || m.y > lead.y) lead = m;
       if (lead && lead.id !== S.leaderId && w.time - S.lastCast > 3) {
-        if (S.leaderId !== null) { cast(lead.code, `${lead.name} öne geçti!`); log(`⚡ <b>${lead.name}</b>${plTag(lead.code)} liderliği aldı`); }
+        if (S.leaderId !== null) { sfx("blip"); cast(lead.code, `${lead.name} öne geçti!`); log(`⚡ <b>${lead.name}</b>${plTag(lead.code)} liderliği aldı`); }
         S.leaderId = lead.id; S.lastCast = w.time;
       }
     }
@@ -422,6 +426,22 @@
     S.follow = best ? best.id : null; renderStandings(true);
   });
 
+  // çarpışma sesleri: sadece ekranda görünenler, en sert birkaç tanesi
+  function playHits(w) {
+    const hits = w.hits; if (!hits || !hits.length) return;
+    const v = S._view;
+    if (!S.demo && v && window.SFX && window.SFX.enabled) {
+      const top = v.top, bot = v.top + CH / v.scale;
+      const vis = hits.filter((h) => h[1] > top && h[1] < bot).sort((a, b) => b[2] - a[2]).slice(0, 3);
+      for (const h of vis) {
+        const pan = (h[0] / E.W) * 1.6 - 0.8;
+        if (h[3] === "bumper") window.SFX.bonk(pan);
+        else window.SFX.click(Math.min(1, h[2] / 900), pan);
+      }
+    }
+    hits.length = 0;
+  }
+
   /* ---------------- Döngü ---------------- */
   const DT = 1 / 240;
   let last = performance.now(), acc = 0;
@@ -436,6 +456,7 @@
           S.shownCount = n;
           const c = $("count");
           c.textContent = n > 0 ? n : "BAŞLA!";
+          sfx("beep", n <= 0);
           c.classList.remove("show"); void c.offsetWidth; c.classList.add("show");
         }
         if (S.countdownT >= 3) { E.openGate(w); S.state = "racing"; setTimeout(() => $("count").classList.remove("show"), 700); }
@@ -445,6 +466,7 @@
       while (acc >= DT && steps < 40) { E.step(w, DT); acc -= DT; steps++; }
       if (steps >= 40) acc = 0;
       if (S.state === "racing") handleEvents();
+      playHits(w);
       renderStandings(false);
     }
     draw();

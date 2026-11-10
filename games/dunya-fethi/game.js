@@ -10,6 +10,7 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let SKIP = false;
   const nap = (ms) => (SKIP ? Promise.resolve() : sleep(ms)); // animasyon beklemeleri, "Sonuca atla" ile kesilir
+  const sfx = (name, ...a) => { if (!SKIP && window.SFX) window.SFX[name](...a); };
   const rnd = (n) => Math.floor(Math.random() * n);
   const fmt1 = (x) => (Math.round(x * 10) / 10).toFixed(1).replace(".", ",");
 
@@ -605,6 +606,7 @@
     for (let i = 0; i < 3; i++) { setDie(elA, i, 1 + rnd(6), "roll"); setDie(elB, i, 1 + rnd(6), "roll"); }
     setScore(elA, "–"); setScore(elB, "–");
     const spin = setInterval(() => {
+      sfx("rattle");
       for (let i = 0; i < 3; i++) {
         if (!stopped.A[i]) setDie(elA, i, 1 + rnd(6), "roll");
         if (!stopped.B[i]) setDie(elB, i, 1 + rnd(6), "roll");
@@ -615,17 +617,18 @@
       if (sp.seq) {
         let sumA = 0, sumB = 0;
         for (let i = 0; i < 3; i++) {
-          stopped.A[i] = true; setDie(elA, i, dA[i], "stop"); sumA += dA[i];
+          stopped.A[i] = true; setDie(elA, i, dA[i], "stop"); sumA += dA[i]; sfx("diceStop");
           setScore(elA, String(sumA));
           $("result").textContent = `${i + 1}. zar: ${nameA} ${dA[i]} attı…`;
           await nap(sp.step);
-          stopped.B[i] = true; setDie(elB, i, dB[i], "stop"); sumB += dB[i];
+          stopped.B[i] = true; setDie(elB, i, dB[i], "stop"); sumB += dB[i]; sfx("diceStop");
           setScore(elB, String(sumB));
           $("result").textContent = `${i + 1}. zar: ${nameB} ${dB[i]} attı…`;
           await nap(sp.step);
         }
       } else {
         for (let i = 0; i < 3; i++) { stopped.A[i] = stopped.B[i] = true; setDie(elA, i, dA[i], "stop"); setDie(elB, i, dB[i], "stop"); }
+        sfx("diceStop"); setTimeout(() => sfx("diceStop"), 70);
       }
     } finally { clearInterval(spin); }
   }
@@ -686,12 +689,13 @@
       if (animated) { showFinal($("sideA"), dA, mA, sA); showFinal($("sideB"), dB, mB, sB); }
       if (sA !== sB) break;
       ties++;
-      if (anim) { $("result").innerHTML = `<span class="rw" style="color:var(--orange2)">Berabere!</span>`; await nap(1200); }
+      if (anim) { $("result").innerHTML = `<span class="rw" style="color:var(--orange2)">Berabere!</span>`; sfx("tie"); await nap(1200); }
     }
 
     const Wn = sA > sB ? A : B, L = Wn === A ? B : A;
     const wM = Wn === A ? mA : mB, lM = Wn === A ? mB : mA;
     if (anim && sp.reveal) { $("result").textContent = "Puanlar hesaplanıyor…"; await nap(sp.reveal); }
+    if (anim) sfx("win");
     if (animated) {
       $(Wn === A ? "sideA" : "sideB").classList.add("win");
       $(Wn === A ? "sideB" : "sideA").classList.add("lose");
@@ -723,6 +727,7 @@
     }
     S.battles++;
     const fell = L.terr.size === 0;
+    if (anim) setTimeout(() => sfx("boom", fell), 180);
     if (fell) L.alive = false;
     if (lM - wM > 0 && (!S.upset || lM - wM > S.upset.gap)) S.upset = { gap: lM - wM, w: Wn.id, l: L.id };
 
@@ -808,6 +813,7 @@
 
   function finish() {
     S.over = true; S.running = false;
+    setTimeout(() => window.SFX && window.SFX.fanfare(), 300);
     gFx.selectAll("*").remove();
     gTerr.selectAll(".terr").classed("atk def", false);
     updateUI();

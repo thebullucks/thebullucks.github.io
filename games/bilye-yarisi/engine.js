@@ -8,6 +8,7 @@
   const G = 1150;          // yerçekimi (px/s²)
   const VMAX = 1200;       // hız sınırı
   const CELL = 100;        // ızgara hücresi (y ekseninde)
+  let HITS = null;         // ses için sert çarpışmalar
 
   /* ---------------- Engeller ---------------- */
   // seg: kalın çizgi (kapsül). circ: daire. Hareketli olanlar update(t) ile konum değiştirir.
@@ -309,7 +310,8 @@
       const vax = (o.ax - o.pax) / dt, vay = (o.ay - o.pay) / dt, vbx = (o.bx - o.pbx) / dt, vby = (o.by - o.pby) / dt;
       ovx = vax * (1 - u) + vbx * u; ovy = vay * (1 - u) + vby * u;
     }
-    respond(m, nx, ny, ovx, ovy, o.e, 0, dt);
+    const vn = respond(m, nx, ny, ovx, ovy, o.e, 0, dt);
+    if (HITS && vn < -260) HITS.push([m.x, m.y, -vn, o.style]);
     return true;
   }
 
@@ -321,7 +323,8 @@
     const nx = dx / d, ny = dy / d;
     m.x += nx * (rr - d); m.y += ny * (rr - d);
     const ovx = o.moving ? (o.cx - o.pcx) / dt : 0, ovy = o.moving ? (o.cy - o.pcy) / dt : 0;
-    respond(m, nx, ny, ovx, ovy, o.e, o.kick || 0, dt);
+    const vn = respond(m, nx, ny, ovx, ovy, o.e, o.kick || 0, dt);
+    if (HITS && vn < -200) HITS.push([m.x, m.y, -vn, o.style]);
     if (o.kick) o.hit = 0.25;
     return true;
   }
@@ -339,11 +342,14 @@
     const tvx = rvx - vn * nx, tvy = rvy - vn * ny;
     const f = Math.min(1, 0.35 * dt * 60 / 60);
     m.vx -= tvx * f * 0.02; m.vy -= tvy * f * 0.02;
+    return vn;
   }
 
   function step(world, dt) {
     world.time += dt;
     if (world.started) world.raceTime += dt;
+    if (!world.hits) world.hits = [];
+    HITS = world.hits.length < 200 ? world.hits : null;
     const t = world.time;
     for (const o of world.movers) {
       if (o.type === "seg") { o.pax = o.ax; o.pay = o.ay; o.pbx = o.bx; o.pby = o.by; }
@@ -390,6 +396,7 @@
           const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, pen = (rr - d) / 2;
           a.x -= nx * pen; a.y -= ny * pen; b.x += nx * pen; b.y += ny * pen;
           const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+          if (HITS && vn < -320) HITS.push([a.x, a.y, -vn, "marble"]);
           if (vn < 0) {
             const jj = -(1 + 0.6) * vn / 2;
             a.vx -= jj * nx; a.vy -= jj * ny; b.vx += jj * nx; b.vy += jj * ny;
