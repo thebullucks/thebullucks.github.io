@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boya Savaşı · TheBullucks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#050b17;--panel:#0b1a33;--panel2:#0f2344;--line:#1d3a66;--cyan:#3fb6f0;--cyan2:#7fd3ff;--orange:#f07a2a;--orange2:#ffa15c;--text:#e8f1ff;--muted:#8aa3c7;--win:#46d39a;--lose:#ff5d6c}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Rubik,system-ui,sans-serif}
+button{font-family:inherit}
+.app{display:grid;grid-template-rows:auto 1fr;height:100vh;height:100dvh}
+header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#071430,#0b1f45)}
+header img{width:40px;height:40px;border-radius:50%;box-shadow:0 0 14px rgba(63,182,240,.5)}
+header h1{font-family:Bungee,Rubik,sans-serif;font-size:20px;margin:0}
+header h1 span{color:var(--orange)}
+header .sp{flex:1}
+.hbtn{background:transparent;border:1px solid var(--line);color:var(--text);padding:7px 12px;border-radius:10px;cursor:pointer;font-size:14px;text-decoration:none;display:inline-flex;gap:6px;align-items:center}
+.hbtn:hover{border-color:var(--cyan)}
+.main{display:grid;grid-template-columns:1fr 360px;min-height:0}
+.stage{position:relative;min-height:0;display:flex;align-items:center;justify-content:center;padding:14px;background:radial-gradient(ellipse at center,#0c2448 0%,#061226 70%)}
+.arenaWrap{position:relative;height:100%;aspect-ratio:1;max-width:100%}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;border-radius:14px;box-shadow:0 0 0 3px #1d3a66,0 10px 40px rgba(0,0,0,.6)}
+#count{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-family:Bungee,Rubik;font-size:110px;color:var(--orange);text-shadow:0 0 40px rgba(240,122,42,.7),0 6px 0 #000;pointer-events:none}
+#count.show{display:flex;animation:pop .8s ease}
+@keyframes pop{0%{transform:scale(2);opacity:0}30%{transform:scale(1);opacity:1}100%{opacity:.9}}
+#flash{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(5,11,23,.9);border:1px solid var(--orange);border-radius:12px;padding:8px 14px;font-weight:800;font-size:15px;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+#flash.show{opacity:1}
+aside{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.card{padding:12px 14px;border-bottom:1px solid var(--line)}
+.card h3{margin:0 0 8px;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.timer{font-family:Bungee,Rubik;font-size:46px;text-align:center;line-height:1;color:var(--cyan2)}
+.timer.hot{color:var(--lose);animation:pulse 1s infinite}
+@keyframes pulse{50%{transform:scale(1.08)}}
+.tlabel{text-align:center;color:var(--muted);font-size:12px;margin-top:4px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{border:none;border-radius:12px;padding:11px;font-weight:800;font-size:15px;cursor:pointer;color:#071430;background:var(--cyan)}
+.btn:hover{filter:brightness(1.1)}
+.btn.or{background:var(--orange);color:#1b0b00}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:600;font-size:13px;padding:9px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.full{grid-column:1/-1}
+.board{flex:1;overflow:auto;padding:4px 10px 12px}
+.row{display:grid;grid-template-columns:22px 26px 1fr 56px;gap:8px;align-items:center;padding:4px 4px;font-size:13px;position:relative}
+.row .rk{color:var(--muted);font-weight:800;text-align:right}
+.sw{width:24px;height:24px;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
+.row .nm{position:relative;height:24px;display:flex;align-items:center;border-radius:6px;overflow:hidden;background:rgba(255,255,255,.04)}
+.row .bar{position:absolute;left:0;top:0;bottom:0;opacity:.6;transition:width .25s;display:block}
+.row .nm span{position:relative;padding-left:8px;font-weight:700;text-shadow:0 1px 3px #000,0 0 2px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .pc{font-weight:800;text-align:right;color:var(--cyan2);font-variant-numeric:tabular-nums}
+.row.top .pc{color:#ffd84a}
+.row .pl{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;box-shadow:0 0 0 1px #000}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:1}
+.seg button{flex:1;background:transparent;border:none;color:var(--muted);padding:7px 4px;font-size:12px;cursor:pointer}
+.seg button.on{background:var(--panel2);color:var(--text);font-weight:700;box-shadow:inset 0 -2px 0 var(--cyan)}
+.srow{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:13px;color:var(--muted)}
+.modal{position:fixed;inset:0;background:rgba(2,6,14,.8);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+.modal.show{display:flex}
+.mbox{background:var(--panel);border:1px solid var(--line);border-radius:20px;max-width:620px;width:100%;padding:22px;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.mbox h2{font-family:Bungee,Rubik;margin:0 0 6px;font-size:24px}
+.mbox h2 span{color:var(--orange)}
+.mbox p{color:var(--muted);margin:0 0 12px;line-height:1.5;font-size:14px}
+.lbl{font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;font-weight:700}
+.prow{display:grid;grid-template-columns:14px 1fr 1.3fr 36px;gap:8px;align-items:center;margin-bottom:8px}
+.prow .dot{width:14px;height:14px;border-radius:50%}
+.prow input,.prow select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:9px;font-size:14px;font-family:inherit;width:100%}
+.prow button{height:36px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.podium{display:flex;align-items:flex-end;justify-content:center;gap:10px;margin:16px 0}
+.pod{text-align:center;width:150px}
+.pod .sw{width:60px;height:60px;margin:0 auto}
+.pod .nm{font-weight:800;margin:6px 0 2px;font-size:14px}
+.pod .t{font-size:13px;color:#ffd84a;font-weight:800}
+.pod .bar{border-radius:10px 10px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:8px;font-family:Bungee,Rubik;font-size:26px;color:#071430;margin-top:6px}
+.pod.p1 .bar{height:110px;background:linear-gradient(#ffe27a,#d9a92a)}
+.pod.p2 .bar{height:80px;background:linear-gradient(#e6eef8,#9fb0c6)}
+.pod.p3 .bar{height:60px;background:linear-gradient(#f2b27a,#b56c34)}
+.reslist{columns:2;font-size:13px;color:var(--muted);margin:10px 0}
+.reslist div{break-inside:avoid;padding:2px 0}
+.copied{color:var(--win);font-size:13px;text-align:center;min-height:18px;margin-top:6px}
+textarea.copybox{width:100%;height:120px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:12px;padding:8px;display:none;margin-top:8px}
+
+/* ---------- Shorts modu (9:16) ---------- */
+#shorts{position:fixed;inset:0;background:#000;display:none;align-items:center;justify-content:center;z-index:15}
+body.shorts #shorts{display:flex}
+.sframe{height:100vh;height:100dvh;aspect-ratio:9/16;max-width:100vw;background:radial-gradient(ellipse at 50% 30%,#0f2a55,#050b17 70%);display:flex;flex-direction:column;padding:3.5vh 3vh 2.5vh;gap:1.6vh;position:relative;overflow:hidden}
+.stitle{display:flex;align-items:center;gap:1.2vh}
+.stitle img{width:6vh;height:6vh;border-radius:50%}
+.stitle .tt{font-family:Bungee,Rubik;font-size:3.6vh;line-height:1}
+.stitle .tt span{color:var(--orange)}
+.stitle .sub{font-size:1.7vh;color:var(--muted);font-weight:700}
+.stitle .st{margin-left:auto;font-family:Bungee,Rubik;font-size:5vh;color:var(--cyan2)}
+.stitle .st.hot{color:var(--lose);animation:pulse 1s infinite}
+.sarena{position:relative;width:100%;aspect-ratio:1;flex:none}
+#scv{position:absolute;inset:0;width:100%;height:100%;border-radius:2vh;box-shadow:0 0 0 .4vh #1d3a66}
+#scount{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-family:Bungee,Rubik;font-size:14vh;color:var(--orange);text-shadow:0 0 4vh rgba(240,122,42,.7),0 .6vh 0 #000;pointer-events:none}
+#scount.show{display:flex;animation:pop .8s ease}
+.sboard{flex:1;display:flex;flex-direction:column;gap:.8vh;min-height:0}
+.sboard .row{grid-template-columns:3vh 4vh 1fr 8vh;gap:1vh;padding:0;font-size:2.1vh}
+.sboard .sw{width:3.8vh;height:3.8vh}
+.sboard .row .nm{height:3.8vh;border-radius:1vh}
+.sboard .row .nm span{padding-left:1.2vh}
+#sflash{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);background:rgba(5,11,23,.92);border:.3vh solid var(--orange);border-radius:1.6vh;padding:1.2vh 2vh;font-weight:800;font-size:2.4vh;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;z-index:2}
+#sflash.show{opacity:1}
+.sexit{position:absolute;right:1vh;bottom:1vh;opacity:.15;transition:opacity .2s;font-size:1.6vh;padding:.6vh 1vh}
+.sexit:hover{opacity:1}
+.swin{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:2vh;background:rgba(2,6,14,.94);z-index:3;text-align:center;padding:3vh}
+.swin.show{display:flex}
+.swin .k{font-family:Bungee,Rubik;font-size:3.4vh;color:var(--orange)}
+.swin .sw{width:16vh;height:16vh}
+.swin .n{font-family:Bungee,Rubik;font-size:5vh}
+.swin .p{font-size:3vh;color:#ffd84a;font-weight:800}
+.swin .o{font-size:2.2vh;color:var(--muted)}
+
+@media (max-width:900px){
+  .main{grid-template-columns:1fr;grid-template-rows:auto auto;overflow:auto}
+  .stage{padding:10px}
+  .arenaWrap{height:auto;width:100%}
+  aside{border-left:none;border-top:1px solid var(--line)}
+  .app{height:auto;min-height:100vh}
+  .hide-sm{display:none}
+  #count{font-size:70px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <a href="../../index.html"><img src="../../assets/logo.jpg" alt="TheBullucks"></a>
+    <h1>BOYA <span>SAVAŞI</span></h1>
+    <div class="sp"></div>
+    <button class="hbtn" id="btnSnd" title="Sesi kapat">🔊</button>
+    <button class="hbtn" id="btnShorts" title="9:16 dikey görünüm">📱 Shorts modu</button>
+    <button class="hbtn" id="btnNew">⚙️ Yeni Maç</button>
+    <a class="hbtn hide-sm" href="../../index.html">← Oyunlar</a>
+  </header>
+  <div class="main">
+    <div class="stage">
+      <div class="arenaWrap" id="arenaWrap">
+        <canvas id="cv"></canvas>
+        <div id="count"></div>
+        <div id="flash"></div>
+      </div>
+    </div>
+    <aside>
+      <div class="card">
+        <div class="timer" id="timer">60</div>
+        <div class="tlabel" id="tlabel">saniye kaldı</div>
+      </div>
+      <div class="card">
+        <div class="controls">
+          <button class="btn or" id="btnStart">▶ Başlat</button>
+          <button class="btn ghost" id="btnRestart">↻ Yeniden</button>
+        </div>
+        <div class="srow">Hız
+          <div class="seg" id="segSpeed"><button data-v="1" class="on">1×</button><button data-v="2">2×</button><button data-v="4">4×</button></div>
+        </div>
+      </div>
+      <div class="card" style="border-bottom:none;padding-bottom:4px"><h3 id="boardTitle">Canlı tablo</h3></div>
+      <div class="board" id="board"></div>
+    </aside>
+  </div>
+</div>
+
+<!-- Shorts görünümü -->
+<div id="shorts">
+  <div class="sframe" id="sframe">
+    <div class="stitle">
+      <img src="../../assets/logo.jpg" alt="">
+      <div><div class="tt">BOYA <span>SAVAŞI</span></div><div class="sub" id="ssub">Süper Lig</div></div>
+      <div class="st" id="stimer">60</div>
+    </div>
+    <div class="sarena"><canvas id="scv"></canvas><div id="scount"></div><div id="sflash"></div></div>
+    <div class="sboard" id="sboard"></div>
+    <div class="swin" id="swin"></div>
+    <button class="hbtn sexit" id="sexit">✕ Shorts modundan çık</button>
+  </div>
+</div>
+
+<div class="modal" id="setup">
+  <div class="mbox">
+    <h2>BOYA <span>SAVAŞI</span></h2>
+    <p>Her takımın topu arenada dolaşıp geçtiği yeri kendi rengine boyar. Süre bitince en çok alanı kaplayan kazanır! Arada çıkan sürprizler: 💣 boya bombası, ⚡ hız, 🔵 dev top, ❄️ rakipleri yavaşlatan buz.</p>
+    <div class="lbl">Takımlar</div>
+    <div class="seg" id="segSet"><button data-v="superlig" class="on">⚽ Süper Lig 2026-27</button><button data-v="countries">🌍 Ülkeler</button></div>
+    <div class="lbl">Kaç takım?</div>
+    <div class="seg" id="segCount"></div>
+    <div class="lbl">Süre</div>
+    <div class="seg" id="segDur"><button data-v="30">30 sn</button><button data-v="60" class="on">60 sn</button><button data-v="90">90 sn</button></div>
+    <div class="lbl">Sürprizler</div>
+    <div class="seg" id="segPow"><button data-v="1" class="on">💣 Açık</button><button data-v="0">Kapalı</button></div>
+    <div class="lbl">Oyuncular (isteğe bağlı)</div>
+    <div id="prows"></div>
+    <div class="controls" style="margin-top:8px">
+      <button class="btn ghost" id="addP">+ Oyuncu ekle</button>
+      <button class="btn or" id="startBtn">Maçı Hazırla</button>
+    </div>
+    <p style="font-size:11.5px;margin:12px 0 0">Kulüp isimleri ve renkleri yalnızca tanıtım amaçlıdır; resmî logo ve armalar kullanılmamıştır.</p>
+  </div>
+</div>
+
+<div class="modal" id="resModal"><div class="mbox" id="resBox"></div></div>
+
+<script src="../../assets/sfx.js"></script>
+<script src="../dunya-fethi/countries.js"></script>
+<script src="teams.js"></script>
+<script src="engine.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
